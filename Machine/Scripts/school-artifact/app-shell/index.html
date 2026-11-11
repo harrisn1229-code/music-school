@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{{TITLE}}</title>
+<meta name="description" content="Classes, lessons, quizzes, drills and a song library. Works offline; your progress stays on this device.">
+<meta name="school-build" content="{{STAMP}}">
+<meta name="school-books" content="{{BOOKS}}">
+<meta name="theme-color" content="#e9ebf0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0c0e13" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Music School">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="app.css">
+<style>
+  /* Shown for the second or two it takes to read the curriculum, and if that fails. */
+  .boot{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:14px;padding:24px;text-align:center;color:var(--muted);font-family:var(--ui);}
+  .boot h1{font-family:var(--disp);font-weight:400;font-size:27px;margin:0;color:var(--ink);}
+  .boot p{margin:0;font-size:13.5px;max-width:42ch;}
+  .boot button{font:inherit;font-weight:600;font-size:13.5px;padding:8px 16px;border-radius:8px;
+    background:var(--theory);color:var(--surface);border:none;cursor:pointer;}
+</style>
+</head>
+<body>
+<div id="app"><div class="boot"><h1>Music School</h1><p id="bootmsg">Opening…</p></div></div>
+<script>window.MS_APP = {build: "{{STAMP}}"};</script>
+<script src="files.js"></script>
+<script src="boot.js"></script>
+</body>
+</html>

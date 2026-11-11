@@ -55,6 +55,13 @@ directly. A chart PDF that is in `Song Library/Files/` ships the same way.
 PianoGroove), album art, downloaded videos, video thumbnails and vendor promo art, manuals. Free
 to view is not free to republish. Those stay named slots, filled from the account's private bucket.
 
+**Album covers are looked up, not shipped.** A song with no sleeve of the reader's own gets one
+found by artist and album in the reader's browser: MusicBrainz for the album and the Cover Art
+Archive for its front cover, then the iTunes Search API's artwork if that has none (`coverFind`
+in `app.js`). Only the picture's address is remembered (`school:covers` in localStorage); the
+service worker keeps the pictures for offline use (`school-covers`). A cover the reader adds, or
+one in the account's bucket, is used instead. A song note needs `artist` and `album` for this.
+
 ## Building and publishing
 
 ```

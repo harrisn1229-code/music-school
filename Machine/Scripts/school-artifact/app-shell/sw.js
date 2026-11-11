@@ -64,10 +64,32 @@ function fromMusic(request) {
   });
 }
 
+// Album covers the page looks up (Cover Art Archive, which hands on to archive.org; iTunes artwork
+// on mzstatic.com). Each is kept the first time it is seen so the song shelf has its sleeves
+// offline. They are asked for in a way the worker may read (CORS), because a copy it cannot read
+// is charged against the browser's storage at several megabytes apiece; a host that refuses that
+// is simply shown, uncached.
+const COVERS = "school-covers";
+const COVER_HOST = /(^|\.)(coverartarchive\.org|archive\.org|mzstatic\.com)$/;
+async function cover(request) {
+  const cache = await caches.open(COVERS);
+  const hit = await cache.match(request.url);
+  if (hit) return hit;
+  let res;
+  try { res = await fetch(request.url, { mode: "cors", credentials: "omit", referrerPolicy: "no-referrer" }); }
+  catch (e) { return fetch(request); }
+  if (res.ok) cache.put(request.url, res.clone()).catch(() => {});
+  return res;
+}
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (COVER_HOST.test(url.hostname) && request.destination === "image") {
+    event.respondWith(cover(request));
+    return;
+  }
   if (url.origin === ROOT.origin && !url.pathname.startsWith(ROOT.pathname)
       && url.pathname.startsWith(PARENT.pathname) && request.mode !== "navigate") {
     event.respondWith(fromMusic(request));

@@ -2,7 +2,7 @@
 
    FILES is written by build.py: every file of the app and a short hash of its contents. Each
    file is cached under "<path>?v=<hash>", so:
-     * an update downloads only the files whose contents changed (the 114 book pages, the fonts
+     * an update downloads only the files whose contents changed (the 114 book pages
        and the PDF reader are fetched once, ever);
      * a new version is only switched to once ALL of its files are saved — a half-downloaded
        update can never be served.

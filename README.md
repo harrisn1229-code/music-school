@@ -56,7 +56,7 @@ docs/                         A one-line redirect to the app's home inside Music
 Machine/Scripts/school-artifact/
     build.py                  Builds docs/ from the notes
     app.js  app.css           The app
-    app-shell/                index.html, start-up, offline worker, file store, fonts, icons, pdf.js
+    app-shell/                index.html, start-up, offline worker, file store, Music skin, icons, pdf.js
 Machine/School/               syllabus.json, eartrain.json
 Machine/Workflows/school.md   How the school itself works (enrolment, releases, tests)
 ```
@@ -78,6 +78,5 @@ single-file page (the one published as a Claude artifact).
 
 ## Licences
 
-The school's own notes, curriculum and code are © their author. Bundled third-party pieces keep
-their own licences: the fonts in `app-shell/fonts/` (SIL Open Font License) and pdf.js in
-`app-shell/vendor/pdfjs/` (Apache 2.0).
+The school's own notes, curriculum and code are © their author. The bundled third-party piece keeps
+its own licence: pdf.js in `app-shell/vendor/pdfjs/` (Apache 2.0).

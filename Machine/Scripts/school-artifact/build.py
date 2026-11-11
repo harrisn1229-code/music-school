@@ -2994,7 +2994,7 @@ def emit_app(d):
     assert 'mode: "library"' in lib and "<title>Library</title>" in lib, "library.html: the shell template changed"
     (d / "library.html").write_text(lib, encoding="utf-8")
     # The service worker carries a list of every file and a hash of each, so an update fetches
-    # only what changed — the 114 Hanon pages and the fonts are downloaded once, ever.
+    # only what changed — the 114 Hanon pages are downloaded once, ever.
     files = {}
     for f in sorted(d.rglob("*")):
         rel = f.relative_to(d).as_posix()

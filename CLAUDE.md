@@ -66,7 +66,8 @@ cd ../music && git add -A && git commit && git push                        # the
 | The curriculum | `00 Human/20 Music/School & Content/Curriculum/` |
 | The notes lessons read from | the other folders under `School & Content/` |
 | The app | `Machine/Scripts/school-artifact/app.js`, `app.css` |
-| Start-up, offline, file store, fonts, icons | `Machine/Scripts/school-artifact/app-shell/` |
+| Start-up, offline, file store, icons | `Machine/Scripts/school-artifact/app-shell/` |
+| The Music app's look, laid over `app.css` | `Machine/Scripts/school-artifact/app-shell/music-skin.css` |
 | The build | `Machine/Scripts/school-artifact/build.py` |
 | How the school works (enrolment, releases, tests) | `Machine/Workflows/school.md` |
 
@@ -75,6 +76,13 @@ cd ../music && git add -A && git commit && git push                        # the
 (`music/shared/cloud.js`), files in IndexedDB, tests marked through `music/shared/ai.js`. Without
 it, the same file is the single-file artifact page (`build.py --artifact`), which saves by
 republishing itself. Keep both working: guard app-only code with `LOCAL`.
+
+**One style across Music.** `app.css` is the school's original look and is what the artifact page
+uses. The app adds `app-shell/music-skin.css` on top: Music's tokens (grey page, white cards,
+system typeface, heavy headings, pill buttons, ink for whatever is selected) and the header bar
+every Music tool has. Restyle the app there, tokens first; change `app.css` only for layout that
+should change in both. `library.html` is the same app in library mode (`LIBMODE`): the Songs,
+Drills, Originals and My files shelves that Music's Library tool links to.
 
 ## Things carried over from the vault that work differently here
 

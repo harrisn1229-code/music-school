@@ -70,7 +70,8 @@ function fromMusic(request) {
 // is charged against the browser's storage at several megabytes apiece; a host that refuses that
 // is simply shown, uncached.
 const COVERS = "school-covers";
-const COVER_HOST = /(^|\.)(coverartarchive\.org|archive\.org|mzstatic\.com)$/;
+// …and the thumbnails of the play-along videos (YouTube's image host), kept the same way.
+const COVER_HOST = /(^|\.)(coverartarchive\.org|archive\.org|mzstatic\.com|ytimg\.com)$/;
 async function cover(request) {
   const cache = await caches.open(COVERS);
   const hit = await cache.match(request.url);

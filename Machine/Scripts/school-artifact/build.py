@@ -2986,6 +2986,13 @@ def emit_app(d):
     index = (index.replace("{{TITLE}}", html.escape(TITLE)).replace("{{STAMP}}", STAMP)
                   .replace("{{BOOKS}}", "full" if any(not b.get("byo") for b in BOOKPAGES.values()) else "none"))
     (d / "index.html").write_text(index, encoding="utf-8")
+    # library.html — the same app opened in library mode: the shelves the Music app's Library tool
+    # links to (songs, drills, the idea board, the reader's files). See LIBMODE in app.js.
+    lib = (index.replace(f"<title>{html.escape(TITLE)}</title>", "<title>Library</title>")
+                .replace('window.MS_APP = {build: "' + STAMP + '"};', 'window.MS_APP = {build: "' + STAMP + '", mode: "library"};')
+                .replace('<div class="boot"><h1>School</h1>', '<div class="boot"><h1>Library</h1>'))
+    assert 'mode: "library"' in lib and "<title>Library</title>" in lib, "library.html: the shell template changed"
+    (d / "library.html").write_text(lib, encoding="utf-8")
     # The service worker carries a list of every file and a hash of each, so an update fetches
     # only what changed — the 114 Hanon pages and the fonts are downloaded once, ever.
     files = {}

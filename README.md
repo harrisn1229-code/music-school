@@ -4,12 +4,16 @@ A self-paced music school that runs in the browser and installs like an app: cla
 lessons, homework, spaced-repetition quizzes, ear training, technique drills with a tempo log, a
 song library, and the notes behind all of it.
 
-**Open it:** <https://harrisn1229-code.github.io/music-school/> (GitHub Pages, served from `docs/`
-on `main`). Add it to a phone's Home Screen or a computer's Dock and it opens with no connection.
+**Open it:** <https://harrisn1229-code.github.io/music/school/>. School is one of the tools inside
+the [Music app](https://github.com/harrisn1229-code/music); this repo is its source (the notes and
+the build), and the built app is written into that repo's `school/` folder.
 
-- **Your progress stays on your device.** It is saved in the browser as you go. *Activity & backup*
-  exports it as one file, imports one, and can keep several devices the same through a private
-  gist on your own GitHub account (the same connection the Music app uses).
+- **Progress** is saved on the device as you go. Signed in to a Music account (email and
+  password), it is saved to the account too and follows you to every device. *Activity & backup*
+  also exports and imports it as one file.
+- **Tests are sat and marked in the app.** You answer on the page; Claude marks it through your own
+  Anthropic API key (the same connection the rest of Music uses) and the result goes straight
+  into your progress.
 - **Nothing licensed is in here.** See below.
 
 ## What is not included, and how the app handles it
@@ -21,12 +25,20 @@ backup or of sync.
 
 | Not in the repo | In the app |
 | --- | --- |
-| *A Modern Method for Guitar, Vol. 1* (Leavitt, Berklee Press) — courses 25–28 | Add your own PDF; each lesson draws the pages it cites from it |
-| Chord-chart and sheet-music PDFs for the song library | Each song lists the chart it expects; add that file or any other |
-| Album art | Lettered tile until you add a cover |
+| *A Modern Method for Guitar, Vol. 1* (Leavitt, Berklee Press) — courses 25–28 | Each lesson draws the pages it cites from a PDF of the book |
+| Chord-chart and sheet-music PDFs for the song library | Each song shows the chart it expects |
+| Album art | Lettered tile until there is a cover |
 | Screenshots and handouts that notes embed (plugin screens, third-party PDFs) | A slot in the note, by file name |
 | Video transcripts | Not used; notes link to the video |
 | Video thumbnails | Linked from YouTube when online, not copied |
+
+Where those files come from:
+
+- **From the account.** They are kept in a private storage bucket. Anyone on the account's members
+  list gets each file automatically the first time it is needed; it is then kept on the device.
+  An owner fills the bucket simply by adding files in the app.
+- **By hand.** Without an account (or off the members list), add your own copy. It is kept in the
+  browser on that device.
 
 **My files** in the app lists every slot. Files are matched by **name**, so *add files* or *add a
 folder* takes a whole pile at once and keeps only what the school has a place for.
@@ -36,7 +48,7 @@ folder* takes a whole pile at once and keeps only what the school has a place fo
 ## What is in here
 
 ```
-docs/                         The built app — what GitHub Pages serves. Generated; do not hand-edit.
+docs/                         A one-line redirect to the app's home inside Music.
 00 Human/20 Music/School & Content/
     Curriculum/               Classes, courses, concepts, tests, school config
     Theory/ Guitar/ Bass/ Piano/ Production/ Ensemble/ Song Library/ YouTube Notes/
@@ -51,12 +63,15 @@ Machine/Workflows/school.md   How the school itself works (enrolment, releases, 
 
 ## Changing it
 
+The app is built into a checkout of the `music` repo sitting beside this one.
+
 1. Edit a note, `app.js`, `app.css`, or something in `app-shell/`.
-2. Rebuild: `python3 Machine/Scripts/school-artifact/build.py`
+2. Rebuild: `python3 Machine/Scripts/school-artifact/build.py --dest ../music/school`
    (needs Python 3 with `markdown`; `poppler` + `imagemagick` only if the Hanon pages in
-   `docs/books/` are ever deleted).
-3. Commit — including `docs/` — and push. Pages updates in a minute or two. An installed copy
-   picks the new version up in the background and shows it the next time it is opened.
+   `music/school/books/` are ever deleted).
+3. Commit and push **both** repos: the source here, and `school/` in `music`. Pages updates in a
+   minute or two. An installed copy picks the new version up in the background and shows it the
+   next time it is opened.
 
 `build.py --artifact --user <name> --new-user --out school-<name>.html` still writes the old
 single-file page (the one published as a Claude artifact).

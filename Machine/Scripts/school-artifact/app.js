@@ -9,14 +9,14 @@
        the `artifact` capability, carries its data in <script type="application/json"> islands;
      * the installable app on GitHub Pages — `LOCAL`. index.html sets `window.MS_APP`, boot.js
        fetches the data files and injects the same islands, and progress is saved in THIS
-       browser's localStorage (`LS_KEY`). Nothing leaves the device unless GitHub sync is on.
+       browser's localStorage (`LS_KEY`), and in the reader's Music account when they are signed in.
 
    The app also has `FILES` (app-shell/files.js): the reader's own copies of anything the school
    expects but does not ship — an in-copyright book, chord-chart PDFs, album art, a handout.
    Every use of either is guarded, so the artifact page behaves exactly as it did before. */
 const LOCAL = !!window.MS_APP;
 const FILES = LOCAL ? (window.MSFiles || null) : null;
-const LS_KEY = 'music-school:progress', LS_AT = 'music-school:savedAt';
+const LS_KEY = 'school:progress', LS_AT = 'school:savedAt';
 const C = JSON.parse(document.getElementById('curriculum').textContent);
 let P = JSON.parse(document.getElementById('progress').textContent);
 /* spec-173 — `assignments` (the per-lesson turn-in) and `drills` (spec-160's tempo track,
@@ -1754,7 +1754,7 @@ function buildDoc(progress) {
     `${S} id="app-js">${js}${E}</body></html>`;
 }
 /* The app's save: one synchronous write of the whole progress block to this browser's storage.
-   `LS_AT` is when — GitHub sync compares it against the copy in the gist to decide who is newer. */
+   `LS_AT` is when — account sync compares it against the saved copy to decide who is newer. */
 function saveLocal() {
   clearTimeout(saveTimer);
   try {
@@ -2088,7 +2088,11 @@ function rail() {
   return `<aside class="rail${open ? '' : ' shut'}">
     <button class="rail-toggle" data-sec-toggle="rail" aria-expanded="${open}"
       aria-label="${open ? 'Collapse menu' : 'Expand menu'}"><span class="car"></span></button>
-    <div class="mast"><h1>Music School</h1>
+    ${/* School is one of the tools inside the Music app; this is the way back to its home screen. */
+      LOCAL ? `<a class="rail-home" href="../" aria-label="Music home, all apps">
+        <svg viewBox="0 0 20 20" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 9.2 10 3.6l6.5 5.6"/><path d="M5.2 8.2v7.6h9.6V8.2"/></svg>
+        <span>Music</span></a>` : ''}
+    <div class="mast"><h1>${LOCAL ? 'School' : 'Music School'}</h1>
       <div class="sem">${kn ? `${kn} ${kn === 1 ? 'class' : 'classes'} enrolled`
                             : 'No classes enrolled'}</div></div>
     ${/* PATCH-111 — Nate: "i just want to segment between what my stuff is verse whats in
@@ -3792,9 +3796,20 @@ function sourceLinks(html) {
    homework gate has to know which item is the test before the render layer does. The hint is
    still printed on the test and nowhere else — it is just printed by testSection() now, under
    the test's own heading rather than inside the homework list. */
-const runTest = (cid, n) => `<div class="runhint">Run <code class="cmd">/school test ${
+/* In the app a test is sat and marked on the page (paperView), so the hint is a button. The
+   single-file page keeps the command: there the test is still sat in Claude Code. */
+const takeBtn = (name, label) => {
+  const last = ((P.tests[name] || {}).attempts || [])[0];
+  return `<div class="runhint"><button class="btn" data-paper="${esc(name)}">${label}</button>${
+    last ? `<span class="calnote" style="margin:0 0 0 10px">last sat ${esc(shortDate(last.date))} — ${esc(String(last.score_pct))}%</span>` : ''}</div>`;
+};
+const runTest = (cid, n) => LOCAL && paperOfLesson(cid, n) ? takeBtn(paperOfLesson(cid, n),
+    ((P.tests[paperOfLesson(cid, n)] || {}).attempts || []).length ? 'Open the test' : 'Take the test')
+  : `<div class="runhint">Run <code class="cmd">/school test ${
   esc(cid)} ${n}</code> in Claude Code — tests are sat there, blind, one question at a time.</div>`;
-const runFinal = (cid) => `<p class="runhint">Run <code class="cmd">/school final ${
+const runFinal = (cid) => LOCAL && paperOfFinal(cid) ? takeBtn(paperOfFinal(cid),
+    ((P.tests[paperOfFinal(cid)] || {}).attempts || []).length ? 'Open the final' : 'Take the final')
+  : `<p class="runhint">Run <code class="cmd">/school final ${
   esc(cid)}</code> in Claude Code — finals are sat in chat, blind, one question at a time.</p>`;
 
 /* PATCH-057 — one quiz, one row: what it is, when it is due, and either a Take button or
@@ -5473,6 +5488,7 @@ function songArt(s, cls) {
   // The app carries no album art. If the reader has added their own copy of this song's sleeve
   // it is drawn from their device (fillLocal sets the src); otherwise the lettered tile stands.
   const mine = LOCAL ? coverKey(s) : '';
+  if (LOCAL && !mine && cloudHas(s.cover_file)) ensureFile(s.cover_file);   // arrives, then redraws
   return mine
     ? `<span class="${cls} has-art"><img data-fthumb="${esc(mine)}" alt="" loading="lazy"></span>`
     : `<span class="${cls} no-art" style="--h:${songHue(s)}"><span>${esc(songInitials(s))}</span></span>`;
@@ -5794,9 +5810,22 @@ function testsView() {
           <span class="qz-d" data-d="${late ? 'late' : 'later'}">due ${esc(shortDate(dayIso(x.due)))}</span>
           <button class="qz-b btn btn-quiet" data-course-lesson="${esc(x.c.id)}:${x.n}">Open</button></div>`;
       }).join('')}</div>
-      <p class="calnote" style="margin:8px 0 0">Tests are sat in chat, blind, one question at a
-        time — <code class="cmd">/school test ${esc(upcoming[0].c.id)} ${upcoming[0].n}</code>.</p>`
+      ${LOCAL ? `<p class="calnote" style="margin:8px 0 0">Open a lesson to take its test. You answer on the
+        page and Claude marks it.</p>` : `<p class="calnote" style="margin:8px 0 0">Tests are sat in chat, blind, one question at a
+        time — <code class="cmd">/school test ${esc(upcoming[0].c.id)} ${upcoming[0].n}</code>.</p>`}`
       : '<p class="calnote" style="margin:0">Nothing scheduled. A lesson test appears here once its lesson is open.</p>'}</div>
+
+    ${/* App build — the papers that belong to no single lesson: course finals reach the reader
+          from their course page, but the cross-course midterms and exams have no other door. */
+      LOCAL ? (() => {
+        const exams = Object.values(PAPERS).filter(p => !p.course);
+        return exams.length ? `<div><div class="dhead"><p class="eyebrow">Exams</p><span class="rule"></span>
+          <span class="cnt">${exams.length}</span></div>
+          <div class="quizlist wide">${exams.map(p => { const a = ((P.tests[p.name] || {}).attempts || [])[0];
+            return `<div class="qz"><span class="qz-t"><span class="st"></span>${esc(p.name)}</span>
+              <span class="qz-d" data-d="later">${a ? `${esc(shortDate(a.date))} — ${esc(String(a.score_pct))}%` : `${p.qs.length} questions`}</span>
+              <button class="qz-b btn btn-quiet" data-paper="${esc(p.name)}">${a ? 'Open' : 'Take'}</button></div>`; }).join('')}</div></div>` : '';
+      })() : ''}
 
     <div><div class="dhead"><p class="eyebrow">Results</p><span class="rule"></span>
       <span class="cnt">${sat.length} sat</span></div>
@@ -6471,8 +6500,10 @@ function drillsView() {
    The join is the FILE NAME, everywhere. That is what makes "add a folder" work: point it at a
    folder of your own files and each one lands in the slot that names it; the rest are ignored.
 
-   WHERE THE FILES GO: IndexedDB in this browser (app-shell/files.js). Never uploaded, never in a
-   backup, never in GitHub sync. Clearing the browser's site data removes them. */
+   WHERE THE FILES GO: IndexedDB in this browser (app-shell/files.js). They are not part of a
+   backup or of the progress an account carries. A member's device fetches them from the account's
+   private bucket; an owner's additions are sent up to it. Clearing the browser's site data
+   removes the copies on this device. */
 const fhas = n => !!(FILES && n && FILES.has(n));
 const fkey = n => FILES ? FILES.norm(n) : '';
 const fext = n => (String(n || '').match(/\.([A-Za-z0-9]+)$/) || [0, ''])[1].toLowerCase();
@@ -6489,7 +6520,7 @@ const CHART_ACCEPT = 'application/pdf,.pdf,image/*,text/plain,.txt';
    for the same reason: it is a real control, so the keyboard and a screen reader get it free. */
 const addBtn = (spec, label, accept, multi) => `<label class="lnkedit upbtn">${label}<input type="file"${
   multi ? ' multiple' : ''}${accept ? ` accept="${accept}"` : ''} data-fadd="${esc(spec)}" hidden></label>`;
-const bookOffset = bid => { try { return +localStorage.getItem('music-school:offset:' + bid) || 0; }
+const bookOffset = bid => { try { return +localStorage.getItem('school:offset:' + bid) || 0; }
                             catch (e) { return 0; } };
 
 /** The sleeve this device has for a song: the file its note names, else one attached by hand. */
@@ -6523,11 +6554,19 @@ function chartBlockLocal(sid) {
         <p class="byo-act"><button type="button" class="lnkedit" data-frm="${esc(m.key)}"
           data-frm-link="chart:${esc(sid)}">Remove</button></p></div></details>`;
     }).join('')}
-    ${missing.map(n => `<div class="byo-miss"><span class="byo-n">${esc(n)}</span>
+    ${missing.map(n => waiting(n) || `<div class="byo-miss"><span class="byo-n">${esc(n)}</span>
       <span class="byo-m">A chart this song's note uses. It is not included with the app.</span>
       ${addBtn('file:' + n, '+ add your copy', CHART_ACCEPT)}</div>`).join('')}
     <p class="byo-act">${addBtn('chart:' + sid, '+ add a chart', CHART_ACCEPT, true)}
       <span class="byo-m">A PDF, a photo or a text file. It stays on this device.</span></p></div>`;
+}
+/** A slot whose file the account has: start fetching it and say so. '' when the account does not
+    have it (or the download failed), which is the caller's cue to offer "add your copy". */
+function waiting(name) {
+  if (!cloudHas(name) || fetchFailed(name)) return '';
+  ensureFile(name);
+  return `<div class="byo-miss byo-wait"><span class="byo-n">${esc(name)}</span>
+    <span class="byo-m">Downloading from your account…</span></div>`;
 }
 /** The small line under a song's title that adds, changes or removes its sleeve. */
 function coverControl(s) {
@@ -6600,7 +6639,7 @@ function fillSlot(el) {
   const m = FILES.get(name);
   if (m) return mountView(el, {key: m.key, name: m.name, file: m.file, rm: true});
   el.dataset.filled = '1';
-  el.innerHTML = `<div class="byo-miss"><span class="byo-n">${esc(name)}</span>
+  el.innerHTML = waiting(name) || `<div class="byo-miss"><span class="byo-n">${esc(name)}</span>
     <span class="byo-m">This note shows a file that is not included with the app.</span>
     ${addBtn('file:' + name, '+ add your copy', ACCEPT[fkind(name)])}</div>`;
 }
@@ -6610,6 +6649,10 @@ function fillByoBook(det, body, bk) {
   if (!FILES || !FILES.ok()) {
     body.innerHTML = `<p class="bk-f"><b>${esc(bk.label)}</b><br>This browser will not store files,
       so the book cannot be added here.</p>`;
+  } else if (!fhas(bk.file) && waiting(bk.file)) {
+    body.innerHTML = `<div class="byo-miss byo-book byo-wait"><span class="byo-n">${esc(bk.label.split(' · ')[0])}</span>
+      <span class="byo-m">Downloading the book from your account. It is a large file and only has to
+      come down once; after that it is kept on this device.</span></div>`;
   } else if (!fhas(bk.file)) {
     body.innerHTML = `<div class="byo-miss byo-book"><span class="byo-n">${esc(bk.label.split(' · ')[0])}</span>
       <span class="byo-m">This course works from a book that is still in copyright, so its pages are
@@ -6701,6 +6744,9 @@ async function handleAdd(inp) {
   if (passed) bits.push(`${passed} skipped — the name matches nothing the school uses`);
   if (failed.length) bits.push(`not added: ${failed.slice(0, 3).join(' · ')}${failed.length > 3 ? ` and ${failed.length - 3} more` : ''}`);
   toast(bits.join(' · ') + '.');
+  // An owner adding a file to a named slot is also how the account gets it, for every other
+  // device and every other member.
+  if (added && cloudFiles.owner) { await cloudRefresh(); pushFilesToCloud(); }
 }
 /** Remove needs two taps: a book is tens of megabytes and one stray tap should not cost a re-add. */
 async function handleRemove(t) {
@@ -6748,6 +6794,7 @@ function filesView() {
         e.where.length > 3 ? ` +${e.where.length - 3}` : ''}</span>` : ''}</span>
       ${m ? `<span class="fr-m">${fsize(m.size)}</span>
              <button type="button" class="lnkedit" data-frm="${esc(k)}">Remove</button>`
+          : cloudHas(e.name) ? `<span class="fr-m fr-c">in your account</span>`
           : addBtn('file:' + e.name, '+ add', e.kind === 'chart' ? CHART_ACCEPT : ACCEPT[fkind(e.name)])}
       ${off ? `<label class="fr-off">Page offset <input type="number" step="1" min="-20" max="20"
         value="${bookOffset(off)}" data-foff="${esc(off)}" aria-label="Page offset for this book">
@@ -6759,8 +6806,10 @@ function filesView() {
       .sort((a, b) => a[1].name.localeCompare(b[1].name));
     if (!items.length) return '';
     const got = items.filter(([k]) => FILES.has(k)).length;
+    const acct = items.filter(([k, e]) => !FILES.has(k) && cloudHas(e.name)).length;
     return `<details class="rd fgrp" data-fgrp="${kind}"${filesOpen.has(kind) ? ' open' : ''}>
-      <summary><span class="rd-t">${title}</span><span class="rd-m">${got} of ${items.length} added</span>
+      <summary><span class="rd-t">${title}</span><span class="rd-m">${got} of ${items.length} on this device${
+        acct ? ` · ${acct} more in your account` : ''}</span>
         <span class="rd-l">${blurb}</span></summary>
       <div class="rd-b flist">${items.map(([k, e]) => row(k, e)).join('')}</div></details>`;
   };
@@ -6777,8 +6826,8 @@ function filesView() {
     <div><p class="eyebrow">On this device</p><h2 class="vh">My files</h2>
       <p class="lede" style="margin-top:8px">Some things the school uses can't be given away with
       it: a book that is still in copyright, chord charts, album art, a few screenshots and
-      handouts. Add your own copies here and they show up where they belong. They are kept in
-      this browser, on this device, and never uploaded.</p></div>
+      handouts. ${who() && cloudFiles.member ? 'Your account carries them, so they arrive on their own.'
+        : 'Add your own copies here and they show up where they belong. They are kept in this browser, on this device.'}</p></div>
     <div class="card"><div class="spread fadd">
       <div style="font-size:12.5px;color:var(--muted);max-width:60ch"><b>Add many at once.</b> Files
         are matched by name, so you can pick a whole pile${dir ? ' or a whole folder' : ''} — the ones
@@ -6787,7 +6836,13 @@ function filesView() {
         ? `<label class="lnkedit upbtn">+ add a folder<input type="file" webkitdirectory multiple data-fadd="folder" hidden></label>` : ''}</div></div>
       <p class="calnote" style="margin:10px 0 0">${all.length ? `${all.length} file${all.length === 1 ? '' : 's'} on this
         device, ${fsize(FILES.bytes())}` : 'Nothing added on this device yet'}${esc(storageNote)}. Backups and sync carry your progress only —
-        files stay on the device they were added on.</p></div>
+        files stay on the device they were added on.</p>
+      ${who() && cloudFiles.member ? `<p class="calnote" style="margin:8px 0 0"><b>Your account has the school's files.</b>
+        Each one downloads the first time it is needed and is then kept on this device.${
+        cloudFiles.owner ? (pushing ? ` Sending to your account: ${pushing.done} of ${pushing.total}…`
+          : cloudMissing().length ? ` ${cloudMissing().length} file${cloudMissing().length === 1 ? '' : 's'} here ${cloudMissing().length === 1 ? 'is' : 'are'} not in your account yet.
+            <button type="button" class="lnkedit" data-fpush="1">Send to my account</button>`
+          : ' Files you add here are sent to your account for your other devices and anyone you have added.') : ''}</p>` : ''}</div>
     <div class="fgrps">${[
       ['book', 'Books', 'A PDF of your own copy. Lessons show the pages they cite.'],
       ['chart', 'Chord charts', 'The charts the song notes were written from, by file name.'],
@@ -6804,65 +6859,40 @@ function filesView() {
     </div></div>`;
 }
 
-/* ------------------------------------------------------------------ backup, and GitHub sync
+/* ------------------------------------------------------------------ backup, and the account
    BACKUP is the whole progress block as one JSON file — the same shape as the vault's
    progress-<user>.json, so a file exported here is also what build.py --artifact seeds from.
 
-   SYNC is the Music app's (same site, so the same saved token: `music:ghToken`): one secret gist
-   per tool on the reader's own GitHub account, here "Music School sync". Progress is ONE document
-   and it syncs as one — whichever side saved last wins, and it only counts as a conflict when
-   BOTH sides changed since they last agreed (`SYNC_BASE`). The losing copy of a conflict is kept
-   on the device (`…:other`) so nothing is ever silently dropped. */
-const GH_TOKEN = 'music:ghToken', GH_USER = 'music:ghUser';
-const GIST_ID = 'music-school:gistId', SYNC_AT = 'music-school:syncedAt', SYNC_BASE = 'music-school:syncBase';
-const LS_OTHER = 'music-school:progress:other';
-const GIST_DESC = 'Music School sync', GIST_FILE = 'music-school.json';
-const TOKEN_URL = 'https://github.com/settings/tokens/new?scopes=gist&description=Music%20sync';
+   THE ACCOUNT is Music's (../shared/cloud.js): one email sign-in for every tool, on a Supabase
+   project. School uses it for two things.
+
+     PROGRESS. One document per person (`app_data`, app = 'school'), readable and writable by
+     that person alone. Progress is ONE document and it syncs as one: whichever side saved last
+     wins, and it only counts as a conflict when BOTH sides changed since they last agreed
+     (`SYNC_BASE`). The losing copy of a conflict is kept on the device (`LS_OTHER`) so nothing
+     is ever silently dropped. Signed out, or with no account service configured, the school
+     simply keeps saving on the device.
+
+     FILES. What the app cannot publish (chord charts, album art, a book in copyright, the
+     screenshots notes embed) lives in a PRIVATE bucket, `school-files`. People on the members
+     list get those files without doing anything: a slot that names a file the bucket has
+     fetches it, keeps it on the device (so it is there offline), and shows it. An OWNER fills
+     the bucket just by adding files here — anything they add to a named slot is also sent up.
+     Objects are named by a hash of the file name: storage keys cannot hold every character a
+     file name can, and the name is the only join there is. */
+const CLOUD = LOCAL && window.MusicCloud && window.MusicCloud.configured ? window.MusicCloud : null;
+const CLOUD_APP = 'school', BUCKET = 'school-files';
+const SYNC_AT = 'school:syncedAt', SYNC_BASE = 'school:syncBase', SYNC_USER = 'school:syncUser';
+const LS_OTHER = 'school:progress:other', LS_CLOUD_FILES = 'school:cloudFiles';
 const lsGet = k => { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } };
 const lsSet = (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} };
-const syncState = {busy: false, err: '', note: ''};
+const syncState = {busy: false, err: '', note: '', form: ''};
+const who = () => CLOUD ? CLOUD.user() : null;
 let syncTimer = null;
 function syncSoon(ms) {
-  if (!LOCAL || !lsGet(GH_TOKEN)) return;
+  if (!CLOUD || !who()) return;
   clearTimeout(syncTimer);
   syncTimer = setTimeout(() => syncNow(false), ms === undefined ? 4000 : ms);
-}
-async function ghApi(path, opt) {
-  const r = await fetch('https://api.github.com' + path, {
-    method: (opt && opt.method) || 'GET', cache: 'no-store',
-    headers: Object.assign({'Accept': 'application/vnd.github+json',
-      'Authorization': 'Bearer ' + ((opt && opt.token) || lsGet(GH_TOKEN))},
-      opt && opt.body ? {'Content-Type': 'application/json'} : {}),
-    body: opt && opt.body ? JSON.stringify(opt.body) : undefined});
-  if (r.status === 401) throw new Error('GitHub did not accept that token.');
-  if (r.status === 403 || r.status === 429) throw new Error(r.headers.get('x-ratelimit-remaining') === '0'
-    ? 'GitHub is limiting requests for a while. Sync will try again later.'
-    : "This token can't use gists. Create one with the gist box ticked.");
-  if (r.status === 404) { const e = new Error('not found'); e.code = 404; throw e; }
-  if (!r.ok) throw new Error('GitHub answered ' + r.status + '.');
-  return r.status === 204 ? null : r.json();
-}
-async function findGist() {
-  const id = lsGet(GIST_ID);
-  if (id) {
-    try { return await ghApi('/gists/' + id); }
-    catch (e) { if (e.code !== 404) throw e; lsSet(GIST_ID, null); }
-  }
-  for (let page = 1; page <= 5; page++) {
-    const list = await ghApi('/gists?per_page=100&page=' + page);
-    const hit = list.find(g => g.description === GIST_DESC && g.files && g.files[GIST_FILE]);
-    if (hit) { lsSet(GIST_ID, hit.id); return ghApi('/gists/' + hit.id); }
-    if (list.length < 100) break;
-  }
-  return null;
-}
-async function gistBody(g) {
-  const f = g && g.files && g.files[GIST_FILE];
-  if (!f) return null;
-  let text = f.content;
-  if (f.truncated && f.raw_url) text = await (await fetch(f.raw_url, {cache: 'no-store'})).text();
-  try { const o = JSON.parse(text); return o && typeof o.progress === 'object' && o.progress ? o : null; }
-  catch (e) { return null; }
 }
 /** Replace this device's progress with `prog` and start again from it. */
 function adoptProgress(prog, at) {
@@ -6872,25 +6902,30 @@ function adoptProgress(prog, at) {
   location.reload();
 }
 async function syncNow(manual) {
-  if (!LOCAL || !lsGet(GH_TOKEN) || syncState.busy) return;
+  if (!CLOUD || !who() || syncState.busy) return;
   if (pending) saveLocal();
   if (sessionLive() && !manual) return syncSoon(30000);       // never reload out from under a quiz
   syncState.busy = true; syncState.err = ''; paintSync();
   try {
-    const g = await findGist(), remote = await gistBody(g);
-    const mine = lsGet(LS_KEY), localAt = lsGet(LS_AT), base = lsGet(SYNC_BASE);
+    const me = who();
+    // A different person signing in on this device starts from THEIR account, never from the
+    // progress the last person left here — that copy is set aside, not uploaded as theirs.
+    const lastUser = lsGet(SYNC_USER), stranger = !!lastUser && lastUser !== me.id;
+    const remote = await CLOUD.load(CLOUD_APP);
+    const mine = stranger ? '' : lsGet(LS_KEY), localAt = stranger ? '' : lsGet(LS_AT);
+    const base = stranger ? '' : lsGet(SYNC_BASE);
     const push = async () => {
       const at = lsGet(LS_AT) || new Date().toISOString();
       if (!lsGet(LS_AT)) lsSet(LS_AT, at);
-      const files = {[GIST_FILE]: {content: JSON.stringify({app: 'music-school', savedAt: at,
-        progress: JSON.parse(lsGet(LS_KEY) || JSON.stringify(P))})}};
-      if (g) await ghApi('/gists/' + g.id, {method: 'PATCH', body: {files}});
-      else lsSet(GIST_ID, (await ghApi('/gists', {method: 'POST',
-        body: {description: GIST_DESC, public: false, files}})).id);
+      await CLOUD.save(CLOUD_APP, {savedAt: at, progress: JSON.parse(lsGet(LS_KEY) || JSON.stringify(P))});
       lsSet(SYNC_BASE, at);
     };
     let took = false;
-    if (!remote) { await push(); syncState.note = 'This device’s progress is now in your gist.'; }
+    if (stranger && lsGet(LS_KEY)) lsSet(LS_OTHER, lsGet(LS_KEY));
+    if (!remote || !remote.progress) {
+      if (stranger) { lsSet(SYNC_USER, me.id); syncState.busy = false; return adoptProgress({user: 'me'}, new Date().toISOString()); }
+      await push(); syncState.note = 'This device’s progress is now saved to your account.';
+    }
     else if (!mine) took = true;                                // a device that has saved nothing yet
     else if (remote.savedAt === localAt) lsSet(SYNC_BASE, localAt);
     else if (localAt === base) took = true;                     // only the other side moved
@@ -6899,7 +6934,7 @@ async function syncNow(manual) {
       syncState.note = 'Another device had newer progress, so that is what is here now. What this device had is kept below.'; }
     else { lsSet(LS_OTHER, JSON.stringify(remote.progress)); await push();
       syncState.note = 'This device had the newer progress and it was kept. The other copy is kept below.'; }
-    lsSet(SYNC_AT, new Date().toISOString());
+    lsSet(SYNC_AT, new Date().toISOString()); lsSet(SYNC_USER, me.id);
     if (took) { lsSet(SYNC_BASE, remote.savedAt); syncState.busy = false; return adoptProgress(remote.progress, remote.savedAt); }
   } catch (e) {
     syncState.err = (e && e.message) || 'Sync failed.';
@@ -6909,15 +6944,106 @@ async function syncNow(manual) {
   if (manual && !syncState.err) toast('Synced.');
 }
 function paintSync() { if (route === 'sync') render(); }
-async function connectSync(token) {
-  token = String(token || '').trim();
-  if (!token) return toast('Paste the token from GitHub first.');
+
+/* ---- the account's private files ---- */
+const cloudFiles = {keys: new Set(), names: new Map(), member: false, owner: false, loaded: false};
+try { JSON.parse(lsGet(LS_CLOUD_FILES) || '[]').forEach(k => cloudFiles.keys.add(k)); } catch (e) {}
+async function cloudKeyOf(name) {
+  const k = fkey(name);
+  if (cloudFiles.names.has(k)) return cloudFiles.names.get(k);
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(k));
+  const hex = Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 40);
+  const key = hex + (fext(name) ? '.' + fext(name) : '');
+  cloudFiles.names.set(k, key);
+  return key;
+}
+/** Synchronous once the names are hashed (cloudRefresh does that for every slot at start-up). */
+const cloudHas = name => !!(CLOUD && who() && name && cloudFiles.keys.has(cloudFiles.names.get(fkey(name))));
+async function cloudRefresh() {
+  if (!CLOUD || !FILES) return;
+  await CLOUD.ready;
+  if (!who()) { cloudFiles.member = cloudFiles.owner = false; cloudFiles.loaded = true; return; }
+  if (window.crypto && crypto.subtle) await Promise.all([...slotReg().values()].map(e => cloudKeyOf(e.name)));
   try {
-    const u = await ghApi('/user', {token});
-    lsSet(GH_TOKEN, token); lsSet(GH_USER, (u && u.login) || '');
-    syncState.note = ''; render();
-    syncNow(true);
-  } catch (e) { toast((e && e.message) || 'Could not connect.'); }
+    const m = await CLOUD.member();
+    cloudFiles.member = m.member; cloudFiles.owner = m.owner;
+    if (m.member) {
+      const list = await CLOUD.listFiles(BUCKET);
+      cloudFiles.keys = new Set(list.map(f => f.name));
+      lsSet(LS_CLOUD_FILES, JSON.stringify([...cloudFiles.keys]));
+    } else { cloudFiles.keys = new Set(); lsSet(LS_CLOUD_FILES, null); }
+  } catch (e) { /* offline: the saved list stands */ }
+  cloudFiles.loaded = true;
+  render();
+}
+/* Fetch one named file from the account onto this device. At most three at a time, each name
+   once; when a batch lands the page is redrawn so every slot that was waiting fills. */
+const fetching = new Map(), fetchQueue = [];
+let fetchActive = 0, fetchPaint = null;
+function ensureFile(name) {
+  const k = fkey(name);
+  if (!cloudHas(name) || fhas(name)) return;
+  if (fetching.has(k)) return;
+  fetching.set(k, 'wait'); fetchQueue.push(name); pumpFetch();
+}
+function pumpFetch() {
+  while (fetchActive < 3 && fetchQueue.length) {
+    const name = fetchQueue.shift(), k = fkey(name);
+    fetchActive++;
+    (async () => {
+      try {
+        const blob = await CLOUD.download(BUCKET, cloudFiles.names.get(k));
+        await FILES.add(new File([blob], name, {type: blob.type || ''}), {as: name});
+        fetching.delete(k);
+      } catch (e) { fetching.set(k, 'fail'); }
+      fetchActive--;
+      clearTimeout(fetchPaint); fetchPaint = setTimeout(render, fetchQueue.length ? 1200 : 150);
+      pumpFetch();
+    })();
+  }
+}
+const fetchFailed = name => fetching.get(fkey(name)) === 'fail';
+/** An owner's local copies of named-slot files that the account does not have yet. */
+const cloudMissing = () => !FILES ? [] : FILES.all().filter(m =>
+  slotReg().has(m.key) && cloudFiles.names.has(m.key) && !cloudFiles.keys.has(cloudFiles.names.get(m.key)));
+let pushing = null;
+async function pushFilesToCloud() {
+  if (!CLOUD || !cloudFiles.owner || pushing) return;
+  const todo = cloudMissing();
+  if (!todo.length) return toast('Your account already has every file on this device.');
+  pushing = {done: 0, total: todo.length, failed: []}; render();
+  for (const m of todo) {
+    try {
+      const u = await FILES.url(m.key), blob = await (await fetch(u)).blob();
+      await CLOUD.upload(BUCKET, cloudFiles.names.get(m.key), blob, m.type);
+      cloudFiles.keys.add(cloudFiles.names.get(m.key));
+    } catch (e) { pushing.failed.push(`${m.name}${e && e.tooBig ? ' (over the account’s size limit for one file)' : ''}`); }
+    pushing.done++;
+    if (route === 'files' || route === 'sync') render();
+  }
+  lsSet(LS_CLOUD_FILES, JSON.stringify([...cloudFiles.keys]));
+  const f = pushing.failed; pushing = null; render();
+  toast(f.length ? `Sent ${todo.length - f.length} of ${todo.length}. Not sent: ${f.slice(0, 3).join(' · ')}${f.length > 3 ? ` and ${f.length - 3} more` : ''}.`
+                 : `Sent ${todo.length} file${todo.length === 1 ? '' : 's'} to your account.`);
+}
+async function accountSubmit(kind) {
+  const email = (app.querySelector('[data-acct-email]') || {}).value || '';
+  const pw = (app.querySelector('[data-acct-pw]') || {}).value || '';
+  syncState.email = email.trim();          // the form is redrawn on every change of state; keep what was typed
+  if (!/^\S+@\S+\.\S+$/.test(email.trim())) return toast('Enter your email address.');
+  if (kind !== 'reset' && pw.length < 8) return toast('Use a password of at least 8 characters.');
+  syncState.busy = true; syncState.err = ''; paintSync();
+  try {
+    if (kind === 'reset') { await CLOUD.resetPassword(email); syncState.note = `A link to set a new password is on its way to ${email.trim()}.`; }
+    else if (kind === 'up') {
+      const r = await CLOUD.signUp(email, pw);
+      syncState.note = r.confirm ? `Almost there. Open the link in the email sent to ${email.trim()}, then sign in here.` : '';
+      syncState.form = '';
+    } else { await CLOUD.signIn(email, pw); syncState.note = ''; }
+  } catch (e) { syncState.err = (e && e.message) || 'That did not work.'; }
+  syncState.busy = false;
+  if (who()) { paintSync(); await cloudRefresh(); return syncNow(true); }
+  paintSync();
 }
 function exportBackup() {
   if (pending) saveLocal();
@@ -6934,7 +7060,7 @@ async function importBackup(inp) {
   if (!f) return;
   let o;
   try { o = JSON.parse(await f.text()); } catch (e) { return toast('That file is not a Music School backup.'); }
-  if (o && o.app === 'music-school' && o.progress) o = o.progress;        // a copy taken from the gist
+  if (o && o.savedAt && o.progress) o = o.progress;                       // a copy taken from the account
   const known = ['concepts', 'courses', 'classes', 'homework', 'tests', 'drills', 'assignments'];
   if (!o || typeof o !== 'object' || Array.isArray(o) || !known.some(k => o[k] && typeof o[k] === 'object'))
     return toast('That file is not a Music School backup.');
@@ -6953,12 +7079,44 @@ function restoreOther() {
 }
 /** The top of Activity & backup in the app: where your progress is, and how to carry it. */
 function localSyncTop() {
-  const token = lsGet(GH_TOKEN), user = lsGet(GH_USER), at = lsGet(SYNC_AT), saved = lsGet(LS_AT);
+  const me = who(), at = lsGet(SYNC_AT), saved = lsGet(LS_AT);
   const when = t => t ? `${shortDate(t.slice(0, 10))}, ${new Date(t).toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'})}` : '';
+  const AI = window.MusicAI || null;
+  const note = syncState.err ? `<p class="calnote" style="margin:10px 0 0;color:var(--due)">${esc(syncState.err)}</p>`
+    : syncState.note ? `<p class="calnote" style="margin:10px 0 0">${esc(syncState.note)}</p>` : '';
+  const account = !CLOUD ? '' : me ? `<div class="card"><div class="spread fadd">
+        <div style="font-size:12.5px;color:var(--muted);max-width:60ch"><b>Signed in</b> as ${esc(me.email)}.
+          ${syncState.busy ? 'Syncing…' : at ? `Last synced ${esc(when(at))}.` : 'Not synced yet.'}
+          Your progress follows this account onto every device you sign in on.
+          ${cloudFiles.loaded ? (cloudFiles.member
+            ? ` This account includes the school's files${cloudFiles.owner ? ', and you can add to them' : ''}.`
+            : ' This account is not on the list for the school’s files, so books, charts and album art are added by hand under My files.') : ''}</div>
+        <div class="row"><button class="btn" data-sync-now="1"${syncState.busy ? ' disabled' : ''}>Sync now</button>
+          <button class="btn btn-quiet" data-acct-out="1">Sign out</button></div></div>${note}</div>`
+    : `<div class="card"><div style="font-size:12.5px;color:var(--muted);max-width:68ch;margin-bottom:10px">
+        <b>${syncState.form === 'up' ? 'Create your account' : 'Sign in'}.</b> One account for the whole Music app.
+        Your progress is saved to it and follows you to every device${syncState.form === 'up' ? '' : ', and it brings the school’s files with it'}.</div>
+      <form class="row acct" data-acct-form="${syncState.form === 'up' ? 'up' : 'in'}">
+        <input class="syncin" type="email" autocomplete="email" inputmode="email" autocapitalize="off" spellcheck="false"
+          placeholder="Email" aria-label="Email" data-acct-email="1" value="${esc(syncState.email || '')}">
+        <input class="syncin" type="password" autocomplete="${syncState.form === 'up' ? 'new-password' : 'current-password'}"
+          placeholder="Password" aria-label="Password" data-acct-pw="1">
+        <button class="btn" type="submit"${syncState.busy ? ' disabled' : ''}>${syncState.busy ? 'One moment…' : syncState.form === 'up' ? 'Create account' : 'Sign in'}</button></form>
+      <p class="byo-act">${syncState.form === 'up'
+        ? `<button type="button" class="lnkedit" data-acct-mode="">I already have an account</button>`
+        : `<button type="button" class="lnkedit" data-acct-mode="up">Create an account</button>
+           <button type="button" class="lnkedit" data-acct-reset="1">Forgot password</button>`}</p>${note}</div>`;
+  const claude = !AI ? '' : `<div class="card"><div class="spread fadd">
+      <div style="font-size:12.5px;color:var(--muted);max-width:60ch"><b>Claude.</b> ${AI.has()
+        ? 'Your Anthropic API key is saved on this device. Tests are marked with it, and the rest of the Music app uses the same one.'
+        : 'Tests are marked by Claude, using your own Anthropic API key. ' + esc(AI.about)}</div>
+      <div class="row">${AI.has() ? `<button class="btn btn-quiet" data-ai-forget="1">Remove key</button>`
+        : `<input class="syncin" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"
+             aria-label="Anthropic API key" data-ai-key="1"><button class="btn" data-ai-save="1">Save key</button>`}</div></div></div>`;
   return `<div class="spread"><div><p class="eyebrow">On this device</p><h2 class="vh">Activity &amp; backup</h2>
       <p class="lede" style="margin-top:8px">Everything you do in the school is saved in this browser
-      as you go${saved ? ` — last saved ${esc(when(saved))}` : ''}. A backup is one small file with
-      all of it. Sync keeps your devices the same.</p></div></div>
+      as you go${saved ? ` — last saved ${esc(when(saved))}` : ''}.${CLOUD ? ' Signed in, it is saved to your account too.' : ''}</p></div></div>
+    ${account}
     <div class="card"><div class="spread fadd">
       <div style="font-size:12.5px;color:var(--muted);max-width:60ch"><b>Backup.</b> Export puts your
         whole progress in one file. Import replaces what is on this device with a file you exported
@@ -6967,52 +7125,51 @@ function localSyncTop() {
         <label class="btn upbtn">Import a backup<input type="file" accept="application/json,.json" data-fimport="1" hidden></label></div></div>
       ${lsGet(LS_OTHER) ? `<p class="calnote" style="margin:10px 0 0">A previous copy of your progress is
         being kept on this device. <button type="button" class="lnkedit" data-frestore="1">Switch back to it</button></p>` : ''}</div>
-    <div class="card">${token ? `<div class="spread fadd">
-        <div style="font-size:12.5px;color:var(--muted);max-width:60ch"><b>Sync is on</b>${user ? ` as ${esc(user)}` : ''}.
-          ${syncState.busy ? 'Syncing…' : syncState.err ? `<span style="color:var(--due)">${esc(syncState.err)}</span>`
-            : at ? `Last synced ${esc(when(at))}.` : 'Not synced yet.'}
-          Your progress is kept in a secret gist on your GitHub account, shared by every device you connect.
-          ${syncState.note ? `<br>${esc(syncState.note)}` : ''}</div>
-        <div class="row"><button class="btn" data-sync-now="1"${syncState.busy ? ' disabled' : ''}>Sync now</button>
-          <button class="btn btn-quiet" data-sync-off="1">Turn off</button></div></div>`
-      : `<div style="font-size:12.5px;color:var(--muted);max-width:68ch"><b>Sync between devices.</b>
-          Your progress can be kept in one secret gist on your own GitHub account, and every device
-          you connect stays the same. If you already connected the Music app in this browser, this
-          is on already. Otherwise:
-          <ol style="margin:8px 0 10px;padding-left:1.3em">
-            <li>Open <a class="xa" href="${TOKEN_URL}" target="_blank" rel="noopener noreferrer">GitHub's token page</a> and sign in.</li>
-            <li>Pick an expiration, keep only <b>gist</b> ticked, and generate the token.</li>
-            <li>Paste it here.</li></ol></div>
-        <div class="row"><input class="syncin" type="password" autocomplete="off" spellcheck="false"
-            placeholder="ghp_…" aria-label="GitHub token" data-sync-token="1">
-          <button class="btn" data-sync-connect="1">Connect</button></div>
-        <p class="calnote" style="margin:10px 0 0">The token can only read and write gists, and it stays
-          on this device. A secret gist is not listed anywhere, but anyone who has its link can open it.</p>`}</div>`;
+    ${claude}`;
 }
 if (LOCAL) {
+  app.addEventListener('submit', e => {
+    const f = e.target.closest('[data-acct-form]');
+    if (!f) return;
+    e.preventDefault(); accountSubmit(f.dataset.acctForm);
+  });
   app.addEventListener('change', e => {
     const t = e.target;
     if (!t || !t.dataset) return;
     if (t.dataset.fadd !== undefined) return handleAdd(t);
     if (t.dataset.fimport !== undefined) return importBackup(t);
     if (t.dataset.foff !== undefined) {
-      lsSet('music-school:offset:' + t.dataset.foff, String(Math.max(-20, Math.min(20, Math.round(+t.value) || 0))));
+      lsSet('school:offset:' + t.dataset.foff, String(Math.max(-20, Math.min(20, Math.round(+t.value) || 0))));
       return toast('Page offset saved for this book.');
     }
   });
   app.addEventListener('click', e => {
-    const t = e.target.closest('[data-frm],[data-fexport],[data-frestore],[data-sync-now],[data-sync-off],[data-sync-connect],[data-fgrp]');
+    const t = e.target.closest('[data-frm],[data-fexport],[data-frestore],[data-sync-now],[data-acct-out],[data-acct-mode],[data-acct-reset],[data-ai-save],[data-ai-forget],[data-fpush],[data-fgrp]');
     if (!t) return;
     const d = t.dataset;
     if (d.fgrp) { if (e.target.closest('summary')) { t.open ? filesOpen.delete(d.fgrp) : filesOpen.add(d.fgrp); } return; }
     if (d.frm) return handleRemove(t);
     if (d.fexport) return exportBackup();
     if (d.frestore) return restoreOther();
+    if (d.fpush) return pushFilesToCloud();
     if (d.syncNow) return syncNow(true);
-    if (d.syncOff) { lsSet(GH_TOKEN, null); lsSet(GH_USER, null); syncState.err = syncState.note = '';
-      toast('Sync is off on this device, for Music School and the Music app. Your progress stays here and in the gist.');
-      return render(); }
-    if (d.syncConnect) { const inp = app.querySelector('[data-sync-token]'); return connectSync(inp && inp.value); }
+    if (d.acctMode !== undefined) {
+      syncState.email = ((app.querySelector('[data-acct-email]') || {}).value || '').trim();
+      syncState.form = d.acctMode; syncState.err = syncState.note = ''; return render();
+    }
+    if (d.acctReset) return accountSubmit('reset');
+    if (d.acctOut) {
+      if (pending) saveLocal();
+      return CLOUD.signOut().then(() => { syncState.err = syncState.note = ''; cloudFiles.member = cloudFiles.owner = false;
+        toast('Signed out. Your progress stays on this device.'); render(); });
+    }
+    if (d.aiSave) {
+      const v = ((app.querySelector('[data-ai-key]') || {}).value || '').trim();
+      if (!window.MusicAI.looksRight(v)) return toast("That doesn't look like an Anthropic API key (they start with sk-ant-).");
+      if (!window.MusicAI.setKey(v)) return toast("Couldn't save the key on this device.");
+      toast('Key saved on this device.'); return render();
+    }
+    if (d.aiForget) { window.MusicAI.clearKey(); toast('Key removed from this device.'); return render(); }
   });
   // <details> opening does not bubble, but it can be caught on the way down: a fold that has
   // just opened may hold slots or a chart that were left empty while it was shut.
@@ -7029,6 +7186,254 @@ if (LOCAL) {
     route = histRoute = e.state.r; render(); window.scrollTo(0, 0);
   });
 }
+/* ================================================================== tests, sat and marked here
+   In the vault a test was a markdown page: answers typed under each question, then `/school
+   grade` in Claude Code marked the page and wrote the result into progress-<user>.json. The app
+   has no vault and no terminal, so it does the whole thing itself:
+
+     * build.py ships each paper (`C.papers`) — the questions, and the key the marker reads;
+     * the reader answers on the page (a draft is kept on the device as they type);
+     * "Grade test" sends questions, key and answers to Claude through the reader's own API key
+       (../shared/ai.js — the same connection the rest of Music uses), and Claude returns a
+       verdict per question through a tool call, so the reply is data and not prose to parse;
+     * the result is written into progress EXACTLY as Machine/Workflows/school.md says a grade
+       is: the attempt (newest first), each missed question as a retake card, missed concepts
+       back to `learning`, and — on a pass — the same release a pass has always meant.
+
+   Scoring is the workflow's: every question is worth 1; a short-answer question scores 1 or 0, a
+   written one scores its rubric fraction (4/5 = 0.8); a blank scores zero and is never sent. */
+const PAPERS = C.papers || {};
+const paperOfLesson = (cid, n) => { const k = `Course ${cid} — Lesson ${n} Test`; return PAPERS[k] ? k : ''; };
+const paperOfFinal = cid => { const k = `Course ${cid} — Final Exam`; return PAPERS[k] ? k : ''; };
+const conceptOfCode = code => !code ? '' : (CONCEPTS[code] ? code
+  : Object.keys(CONCEPTS).find(k => k.startsWith(code + ' ')) || '');
+const paperPass = p => p.pass || (p.kind === 'lesson' ? CFG.lesson_pass : CFG.final_pass) || 80;
+const draftKey = name => 'school:paper:' + name;
+const draftOf = name => { try { return JSON.parse(lsGet(draftKey(name)) || '{}') || {}; } catch (e) { return {}; } };
+const paperMode = {};            // name -> 'take' | 'result'  (this visit only)
+let grading = null;              // {name, ctl} while Claude is marking
+
+const GRADER_SYSTEM = [
+  'You are marking a music school test. Be fair and generous: grade the knowledge, not the notation habit.',
+  '',
+  'Each question is "objective" or "free-text". You are given the question, the terse canonical answer ("key"), other accepted answers, an explanation, a rubric for free-text questions, and the student\'s answer.',
+  '',
+  'Objective questions: verdict "correct" or "incorrect", points 1 or 0. Match on meaning, not on string. Ignore case, spacing and trailing punctuation. "#" and the sharp sign are the same. "b" means flat only when it directly follows a note letter A-G or a Roman numeral; a lone "b" is the note B. Lists of notes are right in any order and with any separators. Accept the usual synonyms (maj7 / M7 / major 7th; m / min / minor; dim / °; aug / +; P5 / perfect 5th; ø7 / half-diminished; and so on). An answer that says more than the key is still correct if the extra is not wrong. An answer that gives only part of what the key requires is incorrect. When in doubt, credit it.',
+  '',
+  'Free-text questions: score against the rubric out of 5 and put that number in points (0 to 5, whole or half points). Verdict "correct" for 5, "incorrect" for 0, "partial" otherwise. Award partial credit.',
+  '',
+  'For every answer that is not fully correct, "why" says specifically what was wrong or missing, in one or two plain sentences addressed to the student ("You named the key but not the letter-sequence rule."). For a correct answer leave "why" empty. Do not restate the question.',
+  '',
+  'Mark every question you are given, once each, by its number. Reply only by calling record_grades.'
+].join('\n');
+const GRADER_TOOL = {
+  name: 'record_grades',
+  description: 'Record the mark for every question on the test.',
+  input_schema: {type: 'object', required: ['grades'], properties: {grades: {type: 'array', items: {
+    type: 'object', required: ['n', 'verdict', 'points', 'why'], properties: {
+      n: {type: 'integer', description: 'The question number.'},
+      verdict: {type: 'string', enum: ['correct', 'incorrect', 'partial']},
+      points: {type: 'number', description: 'Objective: 1 or 0. Free-text: 0 to 5 against the rubric.'},
+      why: {type: 'string', description: 'What was wrong or missing; empty when fully correct.'}}}}}}
+};
+
+async function gradePaper(name) {
+  const paper = PAPERS[name], AI = window.MusicAI;
+  if (!paper || grading) return;
+  if (!AI || !AI.has()) return toast('Add your Anthropic API key below, then grade the test.');
+  const answers = draftOf(name);
+  const given = q => String(answers[q.n] || '').replace(/(\s*\n---\s*)+$/, '').trim();
+  const asked = paper.qs.filter(q => given(q));
+  if (!asked.length) return toast('Answer at least one question first.');
+  grading = {name, ctl: new AbortController()}; render();
+  let rows;
+  try {
+    const data = await AI.call({
+      system: GRADER_SYSTEM, max_tokens: 12000, effort: 'medium', signal: grading.ctl.signal,
+      tools: [GRADER_TOOL], tool_choice: {type: 'tool', name: 'record_grades'},
+      messages: [{role: 'user', content: JSON.stringify({test: paper.title, questions: asked.map(q => ({
+        n: q.n, type: q.type === 'free-text' ? 'free-text' : 'objective', question: q.qt, key: q.a,
+        also_accepted: q.also, explanation: q.why, rubric: q.rubric, student_answer: given(q)}))})}]
+    });
+    const use = data.content.find(b => b.type === 'tool_use' && b.name === 'record_grades');
+    rows = use && use.input && Array.isArray(use.input.grades) ? use.input.grades : null;
+    if (!rows) throw new AI.Error('The marking came back in a form this page could not read. Try again.');
+    const seen = new Set(rows.map(r => +r.n));
+    if (asked.some(q => !seen.has(q.n))) throw new AI.Error('The marking came back incomplete. Try again.');
+  } catch (e) {
+    grading = null; render();
+    if (e && e.name === 'AbortError') return toast('Stopped. Nothing was recorded.');
+    return toast((e && e.message) || 'The test could not be marked. Try again.');
+  }
+  // Claude's verdicts become scores HERE, by the workflow's arithmetic, so a stray number in the
+  // reply can never produce a mark the rules do not allow.
+  const byN = {}; rows.forEach(r => { byN[+r.n] = r; });
+  const grades = paper.qs.map(q => {
+    const free = q.type === 'free-text', a = given(q), r = byN[q.n];
+    if (!a) return {n: q.n, verdict: 'blank', score: 0, pts: free ? 0 : null, why: ''};
+    if (free) {
+      const pts = Math.max(0, Math.min(5, Math.round((+r.points || 0) * 2) / 2));
+      return {n: q.n, verdict: pts >= 5 ? 'correct' : pts <= 0 ? 'incorrect' : 'partial', score: pts / 5, pts, why: String(r.why || '')};
+    }
+    const ok = r.verdict === 'correct';
+    return {n: q.n, verdict: ok ? 'correct' : 'incorrect', score: ok ? 1 : 0, pts: null, why: ok ? '' : String(r.why || '')};
+  });
+  grading = null;
+  applyPaperResult(name, grades, answers);
+}
+
+/** Write one graded attempt into progress — the rules are Machine/Workflows/school.md's. */
+function applyPaperResult(name, grades, answers) {
+  const paper = PAPERS[name], N = paper.qs.length, qOf = {};
+  paper.qs.forEach(q => { qOf[q.n] = q; });
+  const obj = grades.filter(g => qOf[g.n].type !== 'free-text'), ft = grades.filter(g => qOf[g.n].type === 'free-text');
+  const pct = Math.round(grades.reduce((s, g) => s + g.score, 0) / N * 100);
+  const pass = pct >= paperPass(paper);
+  const attempt = {date: TODAY, score_pct: pct, result: pass ? 'passed' : 'failed',
+    objective: `${obj.filter(g => g.score === 1).length}/${obj.length}`,
+    free_text: `${ft.reduce((s, g) => s + (g.pts || 0), 0)}/${ft.length * 5}`,
+    answered: `${grades.filter(g => g.verdict !== 'blank').length}/${N}`};
+  const t = P.tests[name] = Object.assign({attempts: []}, P.tests[name] || {});
+  t.attempts = [attempt].concat(t.attempts || []);
+  t.status = attempt.result;
+  // The latest paper as marked, so it can be read back later and on another device.
+  t.paper = {date: TODAY, answers: Object.assign({}, answers), grades};
+
+  const course = COURSES[paper.course];
+  // A final pass first puts every concept of the course on the maintenance ladder (retired ones
+  // stay retired — that was the reader's call); what was missed is then pulled back below.
+  if (paper.kind === 'final' && course && pass) {
+    Object.values(CONCEPTS).filter(c => c.course === course.id).forEach(c => {
+      if (cs(c.id).status !== 'retired') setC(c.id, {status: 'maintenance', sr_interval: SR.start_interval,
+        sr_due: dayIso(dayOf(TODAY) + SR.start_interval)});
+    });
+    setO(course.id, {status: 'completed', completed: TODAY, lessons_complete: course.lessons.length});
+    const k = Object.keys(CLASSES).find(id => (CLASSES[id].courses || []).includes(course.id));
+    if (k && CLASSES[k].courses.every(id => os(id).status === 'completed')) setK(k, {status: 'completed'});
+  }
+  // Every question short of full marks becomes a retake card, and its concept goes back to learning.
+  const missed = new Set();
+  grades.filter(g => g.score < 1).forEach(g => {
+    const q = qOf[g.n], concept = conceptOfCode(q.concept);
+    P.misses[`${name}#${g.n}`] = {concept, test: name, n: g.n, kind: g.score > 0 ? 'partial' : 'wrong',
+      due: dayIso(dayOf(TODAY) + 7), q: q.qt, a: q.a,
+      why: g.verdict === 'blank' ? 'Left blank.' : (g.why || q.why || '')};
+    if (concept) missed.add(concept);
+  });
+  missed.forEach(id => { if (cs(id).status !== 'queued') setC(id, {status: 'learning', sr_interval: 0, sr_due: TODAY}); });
+  // A lesson test passed is what releases the next lesson: tick the test task (that tick is what
+  // the page means by "sat"), then run the same completion the Complete button runs.
+  let released = '';
+  if (paper.kind === 'lesson' && course && pass) {
+    const u = course.lessons.find(x => x.n === paper.lesson), task = u && testTaskOf(u);
+    if (task) P.homework[task.id] = true;
+    const st = os(course.id).status;
+    if (u && (st === 'enrolled' || st === 'completed') && os(course.id).lessons_complete < u.n) {
+      setO(course.id, {lessons_complete: u.n});
+      if (u.n + 1 <= course.lessons.length) { reconcileReleases(); released = ` Lesson ${u.n + 1} is open.`; }
+    }
+  }
+  lsSet(draftKey(name), null);
+  paperMode[name] = 'result';
+  invalidateSchedule(); dirty(); render(); window.scrollTo(0, 0);
+  toast(pass ? `Passed — ${pct}%.${released}` : `${pct}% — the pass mark is ${paperPass(paper)}%. What you missed is now in your quizzes.`);
+}
+
+function paperView(name) {
+  const paper = PAPERS[name];
+  if (!paper) return `<div class="view"><h2 class="vh">Test</h2><p class="lede">That test is not part of this build.</p></div>`;
+  const rec = P.tests[name] || {}, last = rec.paper || null, attempts = rec.attempts || [];
+  const mode = paperMode[name] || (last && !Object.keys(draftOf(name)).length ? 'result' : 'take');
+  const course = COURSES[paper.course];
+  const where = course ? `${esc(course.short)}${paper.kind === 'lesson' && paper.lesson ? ` · lesson ${paper.lesson}` : ''}` : 'Exam';
+  const back = course ? `<button class="btn btn-quiet" data-course${paper.kind === 'lesson' && paper.lesson
+    ? `-lesson="${esc(course.id)}:${paper.lesson}"` : `="${esc(course.id)}"`}>Back to the ${paper.kind === 'lesson' ? 'lesson' : 'course'}</button>`
+    : `<button class="btn btn-quiet" data-nav="tests">Back to Tests</button>`;
+  const audio = q => q.audio ? `<audio class="byo-media" controls preload="none" src="audio/${esc(encodeURIComponent(q.audio))}"></audio>` : '';
+  const head = `<div><p class="eyebrow">${paper.kind === 'lesson' ? 'Lesson test' : paper.kind === 'final' ? 'Final exam' : 'Exam'} · ${where}</p>
+    <h2 class="vh">${esc(paper.title)}</h2></div>`;
+  const AI = window.MusicAI;
+
+  if (mode === 'result' && last) {
+    const gOf = {}; last.grades.forEach(g => { gOf[g.n] = g; });
+    const a0 = attempts[0] || {}, pass = a0.result === 'passed';
+    return `<div class="view paperv" data-domain="${esc((course && course.domain) || 'theory')}">${head}
+      <div class="pr-ban" data-r="${pass ? 'pass' : 'fail'}"><b>${pass ? 'Passed' : 'Not passed'} — ${esc(String(a0.score_pct))}%</b>
+        <span>Pass mark ${paperPass(paper)}% · short answer ${esc(a0.objective || '')} · written ${esc(a0.free_text || '')} · answered ${esc(a0.answered || '')} · marked ${esc(shortDate(a0.date || TODAY))}</span>
+        ${pass ? '' : '<span>Review the answers marked below, then sit it again. What you missed is in your quizzes as retake cards.</span>'}</div>
+      ${paper.qs.map(q => {
+        const g = gOf[q.n] || {verdict: 'blank', score: 0};
+        const free = q.type === 'free-text';
+        const tag = g.verdict === 'blank' ? 'Blank' : free ? `${g.pts}/5` : g.verdict === 'correct' ? 'Correct' : 'Incorrect';
+        const full = g.score === 1;
+        return `<div class="card pq" data-v="${full ? 'ok' : g.score > 0 ? 'part' : 'no'}">
+          <div class="pq-h"><span class="pq-n">Q${q.n}</span><span class="pq-v">${tag}</span></div>
+          <div class="prose pq-q">${q.q}</div>${audio(q)}
+          <div class="pq-mine"><b>Your answer</b>${last.answers[q.n] ? esc(last.answers[q.n]) : '<i>left blank</i>'}</div>
+          ${full ? '' : `<div class="pq-key"><b>Answer</b>${esc(q.a)}</div>
+            ${g.why ? `<div class="pq-why">${esc(g.why)}</div>` : ''}
+            ${q.why && q.why !== g.why ? `<div class="pq-why">${esc(q.why)}</div>` : ''}`}</div>`;
+      }).join('')}
+      <div class="row" style="gap:8px"><button class="btn" data-paper-again="${esc(name)}">Sit it again</button>${back}</div>
+      ${attempts.length > 1 ? `<p class="calnote">Earlier attempts: ${attempts.slice(1, 6).map(a =>
+        `${esc(shortDate(a.date))} — ${esc(String(a.score_pct))}%`).join(' · ')}</p>` : ''}</div>`;
+  }
+
+  const d = draftOf(name), done = paper.qs.filter(q => String(d[q.n] || '').trim()).length;
+  const busy = grading && grading.name === name;
+  return `<div class="view paperv" data-domain="${esc((course && course.domain) || 'theory')}">${head}
+    <p class="lede">${paper.qs.length} questions · pass at ${paperPass(paper)}%. Answer in your own words, from
+      memory, then have it marked. A blank scores zero. Your answers are kept on this device as you type.</p>
+    ${attempts.length ? `<p class="calnote">Last sat ${esc(shortDate(attempts[0].date))} — ${esc(String(attempts[0].score_pct))}%.
+      ${last ? `<button type="button" class="lnkedit" data-paper-result="${esc(name)}">See that paper as marked</button>` : ''}</p>` : ''}
+    ${paper.qs.map(q => `<div class="card pq">
+      <div class="pq-h"><span class="pq-n">Q${q.n}</span><span class="pq-t">${q.type === 'free-text' ? 'Written answer · marked out of 5' : 'Short answer'}</span></div>
+      <div class="prose pq-q">${q.q}</div>${audio(q)}
+      <textarea class="pq-a" data-pq="${q.n}" data-pq-paper="${esc(name)}" rows="${q.type === 'free-text' ? 4 : 2}"
+        placeholder="Your answer" aria-label="Your answer to question ${q.n}"${busy ? ' disabled' : ''}>${esc(d[q.n] || '')}</textarea></div>`).join('')}
+    ${AI && !AI.has() ? `<div class="card"><div style="font-size:12.5px;color:var(--muted);max-width:68ch;margin-bottom:10px">
+        <b>Marking needs Claude.</b> Tests are marked by Claude, using your own Anthropic API key. ${esc(AI.about)}</div>
+      <div class="row"><input class="syncin" type="password" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"
+        aria-label="Anthropic API key" data-ai-key="1"><button class="btn" data-ai-save="1">Save key</button></div></div>` : ''}
+    <div class="row" style="gap:10px;align-items:center">
+      <button class="btn" data-paper-grade="${esc(name)}"${busy ? ' disabled' : ''}>${busy ? 'Marking…' : 'Grade test'}</button>
+      ${busy ? `<button class="btn btn-quiet" data-paper-stop="1">Stop</button>` : back}
+      <span class="calnote" data-pq-count="1" style="margin:0">${done} of ${paper.qs.length} answered</span></div>
+    ${busy ? '<p class="calnote">Claude is reading your answers against the key. This usually takes under a minute.</p>' : ''}</div>`;
+}
+if (LOCAL) {
+  let draftTimer = null;
+  app.addEventListener('input', e => {
+    const t = e.target;
+    if (!t || !t.dataset || t.dataset.pq === undefined) return;
+    const name = t.dataset.pqPaper;
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      const d = {};
+      app.querySelectorAll('textarea[data-pq]').forEach(x => { if (x.value.trim()) d[x.dataset.pq] = x.value; });
+      lsSet(draftKey(name), Object.keys(d).length ? JSON.stringify(d) : null);
+      const c = app.querySelector('[data-pq-count]');
+      if (c) c.textContent = `${Object.keys(d).length} of ${PAPERS[name].qs.length} answered`;
+    }, 250);
+  });
+  app.addEventListener('click', e => {
+    const t = e.target.closest('[data-paper],[data-paper-grade],[data-paper-again],[data-paper-result],[data-paper-stop]');
+    if (!t) return;
+    const d = t.dataset;
+    if (d.paper) { delete paperMode[d.paper]; return go('paper:' + d.paper); }
+    if (d.paperStop) { if (grading) grading.ctl.abort(); return; }
+    if (d.paperGrade) {
+      // flush what is on screen first: the last keystroke may be inside the debounce
+      const dd = {};
+      app.querySelectorAll('textarea[data-pq]').forEach(x => { if (x.value.trim()) dd[x.dataset.pq] = x.value; });
+      lsSet(draftKey(d.paperGrade), Object.keys(dd).length ? JSON.stringify(dd) : null);
+      return gradePaper(d.paperGrade);
+    }
+    if (d.paperAgain) { lsSet(draftKey(d.paperAgain), null); paperMode[d.paperAgain] = 'take'; render(); return window.scrollTo(0, 0); }
+    if (d.paperResult) { paperMode[d.paperResult] = 'result'; render(); return window.scrollTo(0, 0); }
+  });
+}
+
 /* Back and forward. The single-file page lives in a frame with no history of its own; the app is
    a real page, and on a phone the system Back gesture would otherwise close it outright. Each
    change of route is one history entry, pushed by render(). */
@@ -7066,6 +7471,7 @@ function render() {
     : head === 'tools' ? toolsView()          // spec-177 — the outside-tools shelf
     : head === 'slices' ? slicesView()        // spec-178 — the Soundslice shelf
     : head === 'files' && LOCAL ? filesView()  // app build — the reader's own books, charts, art
+    : head === 'paper' && LOCAL ? paperView(arg) // app build — a test, sat and marked on the page
     : head === 'tests' ? testsView() : overview();
   app.style.setProperty('--rail', railOpen() ? '236px' : '56px');
   // PATCH-144 — the one pass that makes every [[vault note]] the school assigns a live link,
@@ -7597,7 +8003,15 @@ if (s) { sessionStorage.removeItem('hms.scroll'); window.scrollTo(0, +s); }
 (async () => {
   /* The app has no capability to wait for: it saves to the device, always can, and is never the
      read-only copy. `cap` only has to be non-null so the save chip leaves "checking…". */
-  if (LOCAL) { cap = {local: true}; render(); syncSoon(1500); return; }
+  if (LOCAL) {
+    cap = {local: true}; render();
+    if (CLOUD) {
+      // Signing in or out anywhere in Music changes what this page may fetch and where it saves.
+      CLOUD.onChange(() => { cloudRefresh(); if (who()) syncSoon(600); else render(); });
+      CLOUD.ready.then(() => { cloudRefresh(); syncSoon(1200); });
+    }
+    return;
+  }
   cap = await (window.claude && claude.use ? claude.use('artifact') : Promise.resolve(null));
   /* PATCH-131 — re-render on EITHER outcome, not just failure. PATCH-129 gave the save chip a
      third state ("checking…") for the window before the capability answers, but this line only

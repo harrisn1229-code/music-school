@@ -41,7 +41,10 @@ def _opt(flag, default=None):
 # `--out <file>` (or `--artifact`) still writes the old single-file page for one person, exactly
 # as before, for anyone who publishes it as a Claude artifact.
 APP = "--artifact" not in argv and not _opt("--out")
-APP_DIR = VAULT / "docs"
+# Where the app is written. School lives inside the Music app, so the real build is
+#   build.py --dest ../music/school
+# (a checkout of the `music` repo beside this one). Without --dest it lands in docs/.
+APP_DIR = pathlib.Path(_opt("--dest")).expanduser().resolve() if _opt("--dest") else VAULT / "docs"
 USER = _opt("--user")
 if not USER:
     lu = SCHOOL / "local-user.json"
@@ -53,7 +56,7 @@ OUT = HERE / _opt("--out", "school.html")
 # Nate's reverted to an August build and he could not tell which card was his).
 # app.js's buildDoc() re-emits this title from `document.title` on every self-save, so the two
 # must stay in step: hardcoding the name in EITHER place is what silently renames a page back.
-TITLE = "Music School" if APP else f"Music School — {USER.title()}"
+TITLE = "School" if APP else f"Music School — {USER.title()}"
 
 # ---------------------------------------------------------------- config
 # Throttles that the page must agree with. School Config.md is the authority;
@@ -1175,7 +1178,7 @@ def render_book_pages(bid, book, wanted):
         else:
             cache.mkdir(parents=True, exist_ok=True)
             print(f"  rendering {len(todo)} {bid} page(s) at {w}px via {engine} — one-off, "
-                  f"cached in {(PAGE_CACHE / bid).relative_to(VAULT)}")
+                  f"cached in {PAGE_CACHE / bid}")
             for n in todo:
                 p, raw = pdf_page(n), cache / f"_raw{n:03d}"
                 try:
@@ -2686,6 +2689,74 @@ if _log_p.exists():
 ORIGINALS.sort(key=lambda o: (max([o["started"] or ""] + [n["at"] for n in o["notes"]]),
                               o["started"] or "", o["title"]), reverse=True)
 
+# ------------------------------------------------ test papers (app build)
+# The app sits and grades tests itself (the reader answers on the page; Claude marks it through
+# the reader's own API key), so the papers travel with it: questions, and the key the grader
+# marks against. A paper that has been sat in the vault carries that attempt inline — the typed
+# answers, a verdict callout under each, a result banner under the title. NONE of that is read:
+# the question is the text between the metadata comment and `**A:**`, and nothing after it.
+PAPERS = {}
+_Q_HEAD = re.compile(r"^#### Q(\d+)\s*$", re.M)
+_Q_META = re.compile(r"<!--\s*concept:\s*(.*?)\s*·\s*type:\s*([a-z-]+)(?:\s*·\s*audio:\s*([^\s>]+))?\s*-->")
+_KEY_ENTRY = re.compile(r"^\*\*Q(\d+)\.\*\*\s*(.*)$")
+def _paper(path):
+    fm, body = frontmatter(path.read_text(encoding="utf-8"))
+    if str(fm.get("type", "")) != "school-test":
+        return None
+    cut = body.find("## ✅ End of questions")
+    qpart, kpart = (body[:cut], body[cut:]) if cut >= 0 else (body, "")
+    heads = list(_Q_HEAD.finditer(qpart))
+    qs = []
+    for i, m in enumerate(heads):
+        blk = qpart[m.end(): heads[i + 1].start() if i + 1 < len(heads) else len(qpart)]
+        meta = _Q_META.search(blk)
+        text = blk[meta.end():] if meta else blk
+        text = text.split("**A:**")[0].strip()
+        qs.append({"n": int(m.group(1)), "concept": (meta.group(1) if meta else "").strip(),
+                   "type": (meta.group(2) if meta else "objective"),
+                   "audio": (meta.group(3) or "") if meta else "",
+                   "q": md(text), "qt": text})
+    key, cur = {}, None
+    for line in kpart.splitlines():
+        if not line.startswith(">"):
+            continue
+        line = line[1:].strip()
+        m = _KEY_ENTRY.match(line)
+        if m:
+            cur = key.setdefault(int(m.group(1)), {"a": m.group(2).strip(), "also": [], "why": [], "rubric": ""})
+        elif cur is not None and line:
+            if line.startswith("*Also accepted:*"):
+                cur["also"] = [x.strip() for x in line[len("*Also accepted:*"):].split("·") if x.strip()]
+            elif line.startswith("*Rubric"):
+                cur["rubric"] = line.split(":*", 1)[-1].strip()
+            else:
+                cur["why"].append(line)
+    for q in qs:
+        k = key.get(q["n"], {})
+        q.update({"a": k.get("a", ""), "also": k.get("also", []),
+                  "why": " ".join(k.get("why", [])), "rubric": k.get("rubric", "")})
+    course = re.search(r"Course (\d+)", str(fm.get("course") or ""))
+    title = re.search(r"^# (.+)$", body, re.M)
+    try: lesson = int(fm.get("lesson")) if str(fm.get("lesson") or "").strip() else None
+    except (TypeError, ValueError): lesson = None
+    try: pass_pct = int(fm.get("pass_pct"))
+    except (TypeError, ValueError): pass_pct = None
+    return {"name": path.stem, "title": title.group(1).strip() if title else path.stem,
+            "kind": str(fm.get("test_kind") or "lesson"), "course": course.group(1) if course else "",
+            "lesson": lesson, "pass": pass_pct, "qs": qs}
+if APP and (CUR / "Tests").exists():
+    for _p in sorted((CUR / "Tests").rglob("*.md")):
+        try:
+            _pp = _paper(_p)
+        except Exception as _e:                                   # noqa: BLE001
+            print(f"  ! paper {_p.name}: {_e}")
+            continue
+        if _pp and _pp["qs"]:
+            PAPERS[_pp["name"]] = _pp
+    _nokey = [n for n, p_ in PAPERS.items() if any(not q["a"] for q in p_["qs"])]
+    print(f"  papers: {len(PAPERS)} test papers, {sum(len(p_['qs']) for p_ in PAPERS.values())} questions"
+          + (f" · ! {len(_nokey)} with a question that has no key entry" if _nokey else ""))
+
 CURRICULUM = {
     "user": USER, "semester": SEM, "config": CONFIG,
     "classes": CLASSES, "courses": COURSES, "concepts": CONCEPTS, "lessons_external": LESSONS,
@@ -2876,7 +2947,16 @@ def emit_app(d):
     index.html, so GitHub Pages can serve it as-is and the service worker can keep it offline."""
     shell = HERE / "app-shell"
     (d / "data").mkdir(parents=True, exist_ok=True)
-    cur = dict(CURRICULUM, slots=SLOTS)
+    cur = dict(CURRICULUM, slots=SLOTS, papers=PAPERS)
+    # Listening questions name a clip (`audio: ear-NN.wav`); the clips are this school's own
+    # renders (school-eartrain-render.py), so they ship.
+    adir = d / "audio"
+    for name in sorted({q["audio"] for p_ in PAPERS.values() for q in p_["qs"] if q["audio"]}):
+        src = CUR / "Audio" / name
+        if src.exists():
+            adir.mkdir(exist_ok=True)
+            if not (adir / name).exists():
+                shutil.copyfile(src, adir / name)
     (d / "data/curriculum.json").write_text(jdump(cur), encoding="utf-8")
     (d / "data/eartrain.json").write_text(jdump(EARTRAIN), encoding="utf-8")
     (d / "data/bookpages.json").write_text(jdump(BOOKPAGES), encoding="utf-8")
@@ -3119,6 +3199,6 @@ if APP:
     _mine = sum(1 for e in SLOTS.values() if not e["have"])
     print(f"  slots: {len(SLOTS)} embedded file(s) named in notes — {len(SLOTS) - _mine} shipped from "
           f"this repo, {_mine} for the reader to add")
-    print(f"  -> docs/  ({_app_n} files, {_app_kb / 1024:.1f} MB) — the app; commit docs/ to publish")
+    print(f"  -> {APP_DIR}  ({_app_n} files, {_app_kb / 1024:.1f} MB) — the app; commit that folder to publish")
 else:
     print(f"  -> {_shown}  ({kb:.0f} KB)")

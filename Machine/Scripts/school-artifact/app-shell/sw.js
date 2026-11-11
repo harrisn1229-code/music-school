@@ -7,14 +7,14 @@
      * a new version is only switched to once ALL of its files are saved — a half-downloaded
        update can never be served.
    The app opens from this cache every time. A new build is picked up in the background and is
-   what opens the NEXT time. Only the cache named below is ever touched, so other apps on the
-   same site (Music, Barline) keep theirs.
+   what opens the NEXT time. Only the caches named below are ever touched, so the rest of Music
+   keeps its own (Music's worker, ../sw.js, only clears caches named music-app-*).
 
    The reader's own added files (books, charts, sleeves) are NOT here — they live in IndexedDB,
    which this worker never reads or clears. */
 const FILES = /*{{FILES}}*/{};
 const BUILD = "{{STAMP}}";
-const CACHE = "music-school-app";
+const CACHE = "school-app";
 const ROOT = new URL("./", self.location.href);
 
 const hrefFor = (path) => new URL(path.split("/").map(encodeURIComponent).join("/"), ROOT).href;
@@ -47,10 +47,32 @@ self.addEventListener("activate", (event) => {
   })());
 });
 
+// Music's own files that School's page uses (../shared/*.js, the manifest, the icon). They belong
+// to Music's worker, but a page is only ever served by ONE worker and this page is School's, so
+// they are answered here: from whichever cache has them (Music saved them when its home screen
+// was opened), else from the network, keeping a copy so they are there offline next time.
+const PARENT = new URL("../", ROOT);
+const SHARED = "school-shared";
+function fromMusic(request) {
+  return caches.match(request, { ignoreVary: true, ignoreSearch: true }).then((hit) => {
+    const fresh = fetch(request).then((res) => {
+      if (res && res.ok) { const copy = res.clone(); caches.open(SHARED).then((c) => c.put(request, copy)); }
+      return res;
+    });
+    if (hit) { fresh.catch(() => {}); return hit; }
+    return fresh;
+  });
+}
+
 self.addEventListener("fetch", (event) => {
   const request = event.request;
   if (request.method !== "GET") return;
   const url = new URL(request.url);
+  if (url.origin === ROOT.origin && !url.pathname.startsWith(ROOT.pathname)
+      && url.pathname.startsWith(PARENT.pathname) && request.mode !== "navigate") {
+    event.respondWith(fromMusic(request));
+    return;
+  }
   if (url.origin !== ROOT.origin || !url.pathname.startsWith(ROOT.pathname)) return;
   let path;
   try { path = decodeURIComponent(url.pathname.slice(ROOT.pathname.length)); } catch (e) { return; }

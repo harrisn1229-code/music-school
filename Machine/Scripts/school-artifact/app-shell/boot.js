@@ -5,11 +5,19 @@
    an update only downloads what changed), and this script is the bridge: fetch the files, put them
    where app.js looks, put this device's saved progress where the page's own used to be, start app.js.
 
-   Progress lives in localStorage under `music-school:progress`. A device that has never opened
-   the school starts from the empty one below. */
+   Progress lives in localStorage under `school:progress` (Music's rule: a tool's saved data
+   starts with the tool's name). A device that has never opened the school starts from the empty
+   one below. `music-school:progress` is where the short-lived standalone build kept it; it is
+   carried over once. */
 (function () {
   'use strict';
-  var KEY = 'music-school:progress';
+  var KEY = 'school:progress', OLD = 'music-school:';
+  try {
+    if (localStorage.getItem(KEY) === null && localStorage.getItem(OLD + 'progress') !== null) {
+      localStorage.setItem(KEY, localStorage.getItem(OLD + 'progress'));
+      if (localStorage.getItem(OLD + 'savedAt')) localStorage.setItem('school:savedAt', localStorage.getItem(OLD + 'savedAt'));
+    }
+  } catch (e) {}
   var msg = document.getElementById('bootmsg');
   function island(id, text) {
     var s = document.createElement('script');
@@ -63,8 +71,9 @@
   }
   start();
 
-  /* Offline: the service worker saves every file of the app on first visit, and after that the
-     school opens with no connection. Only on https (or localhost) — that is where browsers allow it. */
+  /* Offline: School keeps its own service worker (it is far bigger than the other tools, and this
+     one updates file by file), registered for this folder only. The rest of Music is looked after
+     by ../sw.js. Only on https (or localhost) — that is where browsers allow it. */
   if ('serviceWorker' in navigator && (location.protocol === 'https:' ||
       location.hostname === 'localhost' || location.hostname === '127.0.0.1')) {
     window.addEventListener('load', function () {

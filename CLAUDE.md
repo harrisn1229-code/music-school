@@ -1,7 +1,9 @@
 # Music School — instructions for this repo
 
-This repo is the **public, standalone Music School app**. It is built from the notes in
-`00 Human/20 Music/School & Content/` and served by GitHub Pages from `docs/`.
+This repo is the **source of School**, a tool inside the public Music app
+(`harrisn1229-code/music`, served at `/music/school/`). It holds the notes in
+`00 Human/20 Music/School & Content/` and the build; the built app is written into the `music`
+repo's `school/` folder. Both repos are public.
 
 It began as a copy of a private shared vault that published the school as a Claude artifact. That
 vault and its artifact pages are separate and still in use by other people. **Nothing done here
@@ -15,12 +17,19 @@ should touch them** — do not add that vault's remote, do not publish over anyo
    lesson material, and any `progress-*.json` or `Users/` folder. `.gitignore` lists the known
    paths; a new kind of file needs the same judgement. If unsure, leave it out and say so —
    something pushed to a public repo cannot be taken back.
-2. **Never hand-edit `docs/`.** Edit the sources and rebuild.
+2. **Never hand-edit the built app** (`music/school/`). Edit the sources here and rebuild.
 
 ## How licensed material is handled instead
 
-Anything the school uses but cannot ship is a **named slot**. The reader adds their own copy in the
-app; it is stored in their browser (IndexedDB, `app-shell/files.js`) and never uploaded.
+Anything the school uses but cannot ship is a **named slot**. The file reaches the reader one of
+two ways, and is then kept in their browser (IndexedDB, `app-shell/files.js`):
+
+- from the **account's private bucket** (`school-files` in the Supabase project named in
+  `music/shared/cloud-config.js`) if they are signed in and on the members list — automatic, and
+  an owner fills the bucket just by adding files in the app;
+- or **by hand**, their own copy, added on the My files page.
+
+Private files go in that bucket. They never go in either repo.
 
 | Slot | Where the name comes from |
 | --- | --- |
@@ -37,16 +46,18 @@ the author's own or public domain.
 ## Building and publishing
 
 ```
-python3 Machine/Scripts/school-artifact/build.py     # writes docs/
-git add -A && git commit && git push                  # Pages serves docs/ from main
+python3 Machine/Scripts/school-artifact/build.py --dest ../music/school   # writes the app into the music repo
+git add -A && git commit && git push                                       # here (the source)
+cd ../music && git add -A && git commit && git push                        # there (what Pages serves)
 ```
 
 - Read the build output. `!` lines are problems; `~ unresolved` lines are Read pointers that fell
   back to a link.
-- The service worker (`docs/sw.js`) is regenerated with a hash of every file, so installed copies
-  update themselves; there is no version number to bump.
-- To check a change, serve `docs/` (`python3 -m http.server` inside it) and open it. Progress and
-  added files in that browser are separate from the published site's.
+- School has its own service worker (`school/sw.js`), regenerated with a hash of every file, so
+  installed copies update themselves file by file; there is no version to bump for School. Raise
+  `version` in `music/apps.js` only when something outside `school/` changes.
+- To check a change, serve the `music` folder (`python3 -m http.server` inside it) and open
+  `/school/`.
 
 ## Where things are
 
@@ -59,19 +70,21 @@ git add -A && git commit && git push                  # Pages serves docs/ from 
 | The build | `Machine/Scripts/school-artifact/build.py` |
 | How the school works (enrolment, releases, tests) | `Machine/Workflows/school.md` |
 
-`app.js` runs in two modes. `LOCAL` (set by `docs/index.html`) is this app: progress in
-`localStorage` under `music-school:progress`, optional GitHub gist sync using the Music app's
-token (`music:ghToken`), files in IndexedDB. Without it, the same file is the single-file artifact
-page (`build.py --artifact`), which saves by republishing itself. Keep both working: guard
-app-only code with `LOCAL`.
+`app.js` runs in two modes. `LOCAL` (set by the app's `index.html`) is this app: progress in
+`localStorage` under `school:progress`, saved to the reader's Music account when signed in
+(`music/shared/cloud.js`), files in IndexedDB, tests marked through `music/shared/ai.js`. Without
+it, the same file is the single-file artifact page (`build.py --artifact`), which saves by
+republishing itself. Keep both working: guard app-only code with `LOCAL`.
 
 ## Things carried over from the vault that work differently here
 
 - **Progress** is per device, not `Machine/School/progress-<user>.json`. A backup exported from the
   app has that file's shape.
-- **Tests and finals** are still sat in chat (`/school test <course> <lesson>`, see
-  `Machine/Workflows/school.md`). When running one, read only up to `## ✅ End of questions` —
-  loading the answer key early leaks answers. Results do not flow into the app on their own yet;
-  the reader completes the lesson in the app.
+- **Tests and finals** are sat and marked in the app: `build.py` ships each paper and its key
+  (`C.papers`), the reader answers on the page, and "Grade test" has Claude mark it and writes
+  the result into progress by the rules in `Machine/Workflows/school.md` (`applyPaperResult` in
+  `app.js`). A paper that was sat in the vault carries that attempt inline; the build reads only
+  the questions and the key, never the typed answers. `/school test` in chat still works for the
+  artifact page; if you run one, read only up to `## ✅ End of questions`.
 - **`/school sync`, `sync.py`, the Obsidian plugin** belong to the artifact workflow. They are kept
   for reference and for `--artifact` builds; the app does not use them.

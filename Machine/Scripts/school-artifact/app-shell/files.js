@@ -4,8 +4,9 @@
    art and no vendor screenshots. Where the school expects one of those it shows a slot with the
    file's name, and the reader adds their own copy. This file is where those copies live:
 
-     * in IndexedDB, in THIS browser on THIS device. Nothing here is ever uploaded, and nothing
-       here is part of a backup or of GitHub sync — those carry progress only.
+     * in IndexedDB, in THIS browser on THIS device. This file never sends anything anywhere,
+       and nothing here is part of a backup. (app.js may fill a slot from the reader's account,
+       or send an owner's additions up to it; either way the copy the page shows is this one.)
      * keyed by FILE NAME (case and accent-form folded). That is the only join there is: a slot
        names a file, and a file with that name fills it. A file added for one particular song or
        book through its own button is stored under the name that slot expects, or carries a

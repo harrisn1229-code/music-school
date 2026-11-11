@@ -361,6 +361,7 @@ _RAW_ON   = re.compile(r"""\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)""", re.I
 _RAW_JS   = re.compile(r"""((?:href|src)\s*=\s*['"]?)\s*javascript:""", re.I)
 
 _YT_IMG = re.compile(r'<img\b[^>]*\bsrc="https?://(?:www\.|m\.)?(?:youtube\.com|youtu\.be)/[^"]*"[^>]*>', re.I)
+_EMPTY_PRE = re.compile(r'<pre><code(?: class="[^"]*")?>\s*</code></pre>\n?')
 def defang(html_text):
     """Strip the constructs that can execute; leave ordinary inline formatting alone."""
     out = _RAW_TAGS.sub("", html_text)
@@ -369,6 +370,9 @@ def defang(html_text):
     # <img> pointing at a web page, which can only ever draw a broken-image frame. The note's own
     # "Watch on YouTube" link sits on the next line, so nothing is lost by dropping it.
     out = _YT_IMG.sub("", out)
+    # An Obsidian plugin's block with nothing in it (```drill-controls```) is a widget in the vault
+    # and an empty grey box here.
+    out = _EMPTY_PRE.sub("", out)
     return _RAW_JS.sub(r"\1", out)
 
 # A list item at column 0. Ordered forms are capped at TWO digits on purpose: `\d{1,9}` would
@@ -1667,7 +1671,17 @@ for _d in WATCH_DIRS:
         # because the artifact sandbox cannot reach YouTube.
         if m and not APP:
             thumb = _fetch_thumb(m.group(1))
+        # Which shelf of the Drills page a video sits on, read off its tags: the instrument it is
+        # played on, else ear training, else production, else theory.
+        _tg = fm.get("tags") or []
+        if isinstance(_tg, str):
+            _tg = [t.strip() for t in _tg.strip("[]").split(",")]
+        _tg = {str(t).lower() for t in _tg}
+        _instr = ("ear" if "ear-training" in _tg else "guitar" if "guitar" in _tg
+                  else "bass" if "bass" in _tg else "piano" if _tg & {"piano", "keys", "keyboard"}
+                  else "production" if "production" in _tg else "theory")
         WATCH.append({
+            "instrument": _instr,
             "id": p.stem, "title": p.stem, "url": url, "channel": str(fm.get("channel", "") or ""),
             "duration": str(fm.get("duration", "") or ""), "drill": bool(fm.get("drill", False)),
             "video_type": str(fm.get("video_type", "") or ""), "thumb": thumb,

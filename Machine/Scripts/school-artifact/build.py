@@ -522,6 +522,7 @@ except Exception as e:                                    # noqa: BLE001
 # offers "add your copy", keeps what the reader picks on their own device, and shows it in place.
 # The join is the FILE NAME and nothing else, which is also what lets someone add a whole folder
 # at once and have every file land where it belongs.
+SHIP_W = 1600                # px: the widest a shipped picture is written
 SLOT_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".pdf", ".mp4", ".mov", ".m4a", ".mp3"}
 MEDIA_INDEX = {}             # lowercased basename -> path, for files that ARE in the repo
 try:
@@ -1985,7 +1986,9 @@ if _chart_names and SONGS:
             CHART_STATS["unclaimed"].append(_f.name)
             continue
         if APP:
-            SONGS[_hit[0]].setdefault("chart_files", []).append(_f.name)
+            # A chart that IS in this repo (a public-domain score, the author's own chart) ships
+            # and is shown as it is; any other is a named slot the reader's own copy fills.
+            SONGS[_hit[0]].setdefault("chart_shipped" if _f.exists() else "chart_files", []).append(_f.name)
             CHART_STATS["matched"] += 1
             continue
         if not _f.exists():
@@ -2957,6 +2960,43 @@ def emit_app(d):
             adir.mkdir(exist_ok=True)
             if not (adir / name).exists():
                 shutil.copyfile(src, adir / name)
+    # Files that ARE in this repo and are shown in place: embeds in notes, and shipped charts.
+    # A picture is re-encoded as WebP no wider than SHIP_W (a 2 MB screenshot becomes ~60 KB, and
+    # every file here is downloaded when the app installs); the slot records the name it was
+    # written under (`src`). Anything else is copied as it is.
+    fdir = d / "files"
+    keep = set()
+    def ship(name, path):
+        fdir.mkdir(exist_ok=True)
+        if path.suffix.lower() in (".png", ".jpg", ".jpeg"):
+            out = fdir / (name + ".webp")
+            try:
+                if not out.exists() or out.stat().st_mtime < path.stat().st_mtime:
+                    from PIL import Image                      # noqa: PLC0415
+                    im = Image.open(path)
+                    im = im.convert("RGBA" if "A" in im.getbands() or "transparency" in im.info else "RGB")
+                    if im.width > SHIP_W:
+                        im = im.resize((SHIP_W, round(im.height * SHIP_W / im.width)), Image.LANCZOS)
+                    im.save(out, "WEBP", quality=84, method=6)
+                keep.add(out.name)
+                return out.name
+            except Exception as ex:                           # noqa: BLE001
+                print(f"  ~ {name}: could not be re-encoded ({ex}); shipped as it is")
+        shutil.copyfile(path, fdir / name)
+        keep.add(name)
+        return name
+    for name, e in SLOTS.items():
+        if e["have"]:
+            src = ship(name, MEDIA_INDEX[name.lower()])
+            if src != name:
+                e["src"] = src
+    for s_ in SONGS.values():
+        for name in s_.get("chart_shipped", []):
+            ship(name, CHART_DIR / name)
+    if fdir.is_dir():
+        for f in fdir.iterdir():
+            if f.name not in keep:
+                f.unlink()
     (d / "data/curriculum.json").write_text(jdump(cur), encoding="utf-8")
     (d / "data/eartrain.json").write_text(jdump(EARTRAIN), encoding="utf-8")
     (d / "data/bookpages.json").write_text(jdump(BOOKPAGES), encoding="utf-8")
@@ -2969,18 +3009,6 @@ def emit_app(d):
             out.parent.mkdir(parents=True, exist_ok=True)
             if not out.exists() or out.read_bytes() != f.read_bytes():
                 shutil.copyfile(f, out)
-    # embedded files that ARE in this repo: copied in under the name their slot carries
-    fdir = d / "files"
-    keep = set()
-    for name, e in SLOTS.items():
-        if e["have"]:
-            fdir.mkdir(exist_ok=True)
-            shutil.copyfile(MEDIA_INDEX[name.lower()], fdir / name)
-            keep.add(name)
-    if fdir.is_dir():
-        for f in fdir.iterdir():
-            if f.name not in keep:
-                f.unlink()
     (d / ".nojekyll").write_text("", encoding="utf-8")
     index = (shell / "index.html").read_text(encoding="utf-8")
     index = (index.replace("{{TITLE}}", html.escape(TITLE)).replace("{{STAMP}}", STAMP)

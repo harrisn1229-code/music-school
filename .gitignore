@@ -7,11 +7,17 @@
 #    these and every reader adds their own copy on their own device.
 00 Human/20 Music/School & Content/Books/
 00 Human/20 Music/School & Content/Song Library/Files/*.pdf
+# …except scores that are in the public domain (Satie's Gymnopédies, the IMSLP scan).
+!00 Human/20 Music/School & Content/Song Library/Files/Erick Satie - 3 Gymnopedies.pdf
 00 Human/20 Music/School & Content/Song Library/Images/
 00 Human/20 Music/School & Content/Song Library/Files/*.m4a
 00 Human/20 Music/School & Content/YouTube Notes/Transcripts/
 00 Human/20 Music/School & Content/Production/Manuals/
-00 Human/20 Music/School & Content/Production/Plugins/Images/
+# Plugins/Images/ is NOT ignored (owner's call, 2026-11-11): plain screenshots of a plugin's own
+# window, shown in the note about that plugin, ship. Video thumbnails and promo art do not — see
+# CLAUDE.md — and the annotation working files stay out.
+00 Human/20 Music/School & Content/Production/Plugins/Images/*.json
+00 Human/20 Music/School & Content/Production/Plugins/Images/*.annotated.*
 00 Human/20 Music/School & Content/Production/Plugins/_Source Screenshots/
 00 Human/20 Music/School & Content/Guitar/**/*.pdf
 00 Human/20 Music/School & Content/Theory/Files/*.pdf

@@ -13,7 +13,7 @@ should touch them** — do not add that vault's remote, do not publish over anyo
 
 1. **This repo is public. Never commit licensed or third-party material, or anyone's personal
    data.** That means: book scans still in copyright, chord-chart / sheet-music PDFs, album art,
-   vendor screenshots or manuals, paid lesson PDFs, video transcripts or downloads, a teacher's
+   vendor promo art or manuals (plain plugin screenshots are allowed, see below), paid lesson PDFs, video transcripts or downloads, a teacher's
    lesson material, and any `progress-*.json` or `Users/` folder. `.gitignore` lists the known
    paths; a new kind of file needs the same judgement. If unsure, leave it out and say so —
    something pushed to a public repo cannot be taken back.
@@ -40,8 +40,20 @@ Private files go in that bucket. They never go in either repo.
 
 The join is always the **file name**. To add a new slot, just reference the file from a note (or
 add its name to `_filenames.txt`) and do not commit the file. A file that *is* in the repo and is
-embedded by a note is copied to `docs/files/` and shown directly — only do that for files that are
-the author's own or public domain.
+embedded by a note is shipped (`files/` in the built app; pictures are re-encoded as WebP) and shown
+directly. A chart PDF that is in `Song Library/Files/` ships the same way.
+
+**What may be in the repo** (owner's decision, 2026-11-11):
+
+- the author's own files (handwritten notes, his own charts and photos);
+- public-domain scores, from a public-domain edition (Hanon; Satie's Gymnopédies, IMSLP scan);
+- plain screenshots of a plugin's own window, shown in the note about that plugin
+  (`Production/Plugins/Images/`).
+
+**What may not**, even though it can be found online: chord sheets and tabs printed from a site
+(they carry the full lyrics), published or purchased sheet music, a teacher's handouts (Bernth,
+PianoGroove), album art, downloaded videos, video thumbnails and vendor promo art, manuals. Free
+to view is not free to republish. Those stay named slots, filled from the account's private bucket.
 
 ## Building and publishing
 

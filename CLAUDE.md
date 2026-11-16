@@ -101,7 +101,7 @@ uses. The app adds `app-shell/music-skin.css` on top: Music's tokens (grey page,
 system typeface, heavy headings, pill buttons, ink for whatever is selected) and the header bar
 every Music tool has. Restyle the app there, tokens first; change `app.css` only for layout that
 should change in both. `library.html` is the same app in library mode (`LIBMODE`): the Songs,
-Drills, Originals and My files shelves that Music's Library tool links to.
+Drills, Tools and My files shelves that Music's Library tool links to.
 
 ## Things carried over from the vault that work differently here
 

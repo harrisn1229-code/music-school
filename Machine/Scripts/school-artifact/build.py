@@ -503,11 +503,8 @@ try:
         _top = _p.relative_to(SC_ROOT).parts[0]
         if _top == "Curriculum":            # the school's own notes are already in the page
             continue
-        # spec-179 -- the shared idea board, skipped for the SAME reason Curriculum is: these
-        # notes have a real page in the bundle already (`original:<id>`, with the thread and the
-        # composer on it), and a source page is strictly worse -- a read-only copy of the prose
-        # with no way to reply. Leaving them in would also spend REF_CAP/REF_BUDGET on the one
-        # kind of note that grows every time somebody types into the page.
+        # Originals moved out of School into its own app. The folder's notes are still never
+        # read as source pages here: they are the readers' own song ideas, and this repo is public.
         if _top == "Originals":
             continue
         _k = _p.stem.lower()
@@ -2555,157 +2552,6 @@ for _p in sorted((CUR / "Tests").rglob("*.md")) if (CUR / "Tests").exists() else
 LINK_ROUTES.setdefault("drill index", "drills")
 LINK_ROUTES.setdefault("song library", "songs")
 
-# ------------------------------------------------- the shared idea board (spec-179, 2026-09-10)
-# Nate: *"i want to create an 'originals' tab within the music school artifact so myself and my
-# sister can put song ideas there and ideate on them."*
-#
-# `School & Content/Originals/` -- SHARED, unlike `Users/<Name>/Originals/`, which stays private and
-# stays out of this. That placement is the whole mechanism: sync-shared.sh already mirrors
-# `School & Content/`, so an idea written on either page reaches the other person's clone with no
-# new transport. The round trip is a sync and a rebuild each way, which is the same lag Handoff.md
-# has always had and the reason this is a board rather than a chat.
-#
-# The page can WRITE here, which no other shelf in this build can do. It writes the way the lesson
-# capture does (PATCH-019) -- into the progress island, with sync.py turning it into a real note --
-# because that is the one channel this system persists reliably. Two consequences shape the format:
-# `capture_id` on the note and `<!-- nid:… -->` on each comment, so a capture handed over twice is
-# written once. See the folder's own _README.md.
-ORIG_DIR = SC_ROOT / "Originals"
-ORIGINALS = []
-ORIG_STATS = {"notes": 0, "comments": 0, "failed": [], "unkeyed": [], "badlog": []}
-# `### Britt — 2026-09-11`. Lenient about the dash (em, en or hyphen) because it is typed by hand
-# as often as it is written by sync.py; anchored on the DATE rather than the name, since a name is
-# free text and may itself contain a dash.
-ORIG_NOTE_HEAD = re.compile(r"^###\s+(.*?)\s*[—–-]\s*(\d{4}-\d{2}-\d{2})\s*$", re.M)
-ORIG_NID = re.compile(r"<!--\s*nid:([A-Za-z0-9_.:@+~-]{1,64})\s*-->")
-
-
-ORIG_NOTES_H = re.compile(r"^##[ \t]+Notes[ \t]*$", re.M)
-
-
-def _orig_section(body, want):
-    """The body under `## <want>`, up to the next depth-2 heading.
-
-    `[ \\t]*$` and never `\\s*$`: `\\s` matches newlines, so a greedy trailing `\\s*` walks the
-    match past the blank lines under the heading and into the section itself.
-    """
-    m = re.search(r"^##[ \t]+" + re.escape(want) + r"[ \t]*$(.*?)(?=^##[ \t]|\Z)",
-                  body, re.S | re.M)
-    return m.group(1).strip() if m else ""
-
-
-def _orig_body(text):
-    """Everything ABOVE `## Notes` — which may be one line, or a whole song project.
-
-    The board shipped rendering only `## The idea`, because that is the heading its own composer
-    writes. That is fine until an idea gets worked on: `I would hate me now` carries structure,
-    chord derivation, voicings, arrangement and mix notes across 14 sections, and a renderer that
-    reads one of them would have shown a paragraph and silently dropped the rest of the note —
-    with nothing anywhere saying so. The heading is a CONVENTION for what the page writes, not a
-    contract for what a note may contain, so the whole body renders.
-
-    Returns (html, simple) — `simple` marks the one-section shape, which is the only case where
-    the card's "The idea" label is not a lie about what is under it.
-    """
-    m = ORIG_NOTES_H.search(text)
-    head = text[:m.start()] if m else text
-    head = re.sub(r"^#[ \t]+.*$", "", head, count=1, flags=re.M)   # the H1 repeats the title
-    simple = re.findall(r"^##[ \t]+(.+?)[ \t]*$", head, re.M) == ["The idea"]
-    if simple:
-        head = re.sub(r"^##[ \t]+The idea[ \t]*$", "", head, count=1, flags=re.M)
-    # floor=3, and _demote's own docstring says why it must never be 2: app.css styles
-    # `.prose h3`-`h6` and nothing else, so an h2 in this body renders as an unstyled default.
-    return md(_demote(head.strip(), 3)), simple
-
-
-def _orig_thread(body):
-    """`## Notes` -> the comment thread, newest-first, each with its stable nid."""
-    sec = _orig_section(body, "Notes")
-    if not sec:
-        return []
-    out, heads = [], list(ORIG_NOTE_HEAD.finditer(sec))
-    for i, h in enumerate(heads):
-        text = sec[h.end():(heads[i + 1].start() if i + 1 < len(heads) else len(sec))]
-        # The marker sits ABOVE its heading, so it is in the text that precedes this one --
-        # the tail of the previous block, or the section's own preamble for the first note.
-        before = sec[(heads[i - 1].end() if i else 0):h.start()]
-        nid = (ORIG_NID.findall(before) or [""])[-1]
-        # A comment with no marker still renders. It just cannot be deduped against a page
-        # capture, so sync.py can never match one and will append rather than skip -- worth
-        # reporting once rather than silently treating hand-written notes as machine-written.
-        text = ORIG_NID.sub("", text).strip()
-        out.append({"id": nid, "by": h.group(1).strip(), "at": h.group(2), "html": md(text)})
-    return out
-
-
-for _op in sorted(ORIG_DIR.glob("*.md")) if ORIG_DIR.exists() else []:
-    if _op.stem.startswith("_"):                       # _README.md and friends
-        continue
-    try:
-        _raw = _op.read_text(encoding="utf-8")
-    except Exception as e:                                    # noqa: BLE001
-        ORIG_STATS["failed"].append(f"{_op.stem}: {type(e).__name__}")
-        continue
-    _fm, _body = frontmatter(_raw)
-    if _fm_str(_fm, "type") != "song-idea":
-        continue
-    ORIG_STATS["notes"] += 1
-    _cap = _fm_str(_fm, "capture_id")
-    if not _cap:
-        ORIG_STATS["unkeyed"].append(_op.stem)
-    _thread = _orig_thread(_body)
-    _obody, _osimple = _orig_body(_body)
-    ORIG_STATS["comments"] += len(_thread)
-    # The id the page routes on. `capture_id` when there is one so the route survives a rename of
-    # the note; the slug otherwise, which is the best a hand-written note without one can do.
-    _oid = _cap or _slug(_op.stem)
-    ORIGINALS.append({
-        "id": _oid, "capture_id": _cap, "file": _op.stem,
-        "title": _fm_str(_fm, "title") or _op.stem,
-        "by": _fm_str(_fm, "by"), "status": _fm_str(_fm, "status") or "spark",
-        "key": _fm_str(_fm, "key"), "bpm": _fm_str(_fm, "bpm"), "feel": _fm_str(_fm, "feel"),
-        "started": _fm_str(_fm, "started"), "tags": _fm_list(_fm, "tags"),
-        "genre": _fm_str(_fm, "genre"),
-        "html": _obody, "simple": _osimple,
-        "notes": _thread,
-    })
-# ------------------------------------------------- the log (2026-09-10)
-# Nate: *"maybe for originals theres a specific change log or notes page that records all inputs
-# and shit."* One page for the whole board, not one per idea — an idea's own `## Notes` thread
-# already holds its reasoning, and what was missing was the view ACROSS them: what happened here,
-# in order, without opening six notes to find out.
-#
-# Deliberately thin. One line per event, and the format is enforced by nothing but this regex —
-# a line that does not match is skipped rather than half-rendered, and the `!` below says so, so a
-# typo is visible instead of silently swallowing an entry.
-ORIG_LOG = []
-ORIG_LOG_RE = re.compile(r"^-\s+\*\*(\d{4}-\d{2}-\d{2})\*\*\s*·\s*(.+?)\s*·\s*(.+?)\s*$", re.M)
-_log_p = ORIG_DIR / "_Log.md"
-if _log_p.exists():
-    try:
-        _log_raw = _log_p.read_text(encoding="utf-8")
-        _log_sec = _orig_section(_log_raw, "Log")
-        for _ln in _log_sec.split("\n"):
-            if not _ln.strip():
-                continue
-            _lm = ORIG_LOG_RE.match(_ln)
-            if _lm:
-                ORIG_LOG.append({"at": _lm.group(1), "by": _lm.group(2),
-                                 "what": md_inline(_lm.group(3))})
-            elif _ln.lstrip().startswith("-"):
-                ORIG_STATS["badlog"].append(_ln.strip()[:70])
-        # Sorted here rather than trusted from the file: it is hand-edited as well as appended to,
-        # and a log that is only newest-first when somebody remembered to put the line at the top
-        # is not an ordering, it is a habit.
-        ORIG_LOG.sort(key=lambda e: e["at"], reverse=True)
-    except Exception as e:                                    # noqa: BLE001
-        ORIG_STATS["failed"].append(f"_Log.md: {type(e).__name__}")
-
-# Newest-FIRST, by last activity rather than by `started` ([[feedback_newest_first_ordering]]):
-# an idea somebody replied to this morning belongs at the top even if it was started in June.
-ORIGINALS.sort(key=lambda o: (max([o["started"] or ""] + [n["at"] for n in o["notes"]]),
-                              o["started"] or "", o["title"]), reverse=True)
-
 # ------------------------------------------------ test papers (app build)
 # The app sits and grades tests itself (the reader answers on the page; Claude marks it through
 # the reader's own API key), so the papers travel with it: questions, and the key the grader
@@ -2809,15 +2655,6 @@ CURRICULUM = {
     # tools each give: a numeral there means WORK OWED TODAY, and a slice is a door, never a debt.
     # The homework that assigns one is what is owed, and it is already counted on the Homework tab.
     "slices": SLICES,
-    # spec-179 -- the shared idea board. The ONE writable shelf in this bundle: the page appends
-    # captures to `P.originals` and sync.py turns them into the notes read back here. Countless on
-    # the rail like every other shelf, and for a sharper reason than "nothing is due" -- the only
-    # count worth having would be unsynced captures, and PATCH-126 already settled that a badge
-    # nothing on this page can clear does not go on this rail.
-    "originals": ORIGINALS,
-    # …and the board's log — every input across all of them, newest first. Its own key rather than
-    # a field on an idea, because that is exactly the view it exists to give.
-    "orig_log": ORIG_LOG,
 }
 
 prog_path = SCHOOL / f"progress-{USER}.json"
@@ -3225,18 +3062,6 @@ for _m in SONG_STATS["shadowed"]:
     print(f"  ! song note shadowed in the reading index: {_m}", file=sys.stderr)
 for _m in SONG_STATS["failed"]:
     print(f"  ! song library: {_m}", file=sys.stderr)
-# spec-179 — the idea board. Printed even at zero, unlike the shelves above: this one is WRITTEN
-# to from the page, so "0 ideas" after a sync that was supposed to land one is the finding.
-print(f"  originals: {len(ORIGINALS)} idea(s) · {ORIG_STATS['comments']} comment(s) in the threads"
-      f" · {len(ORIG_LOG)} log entr{'y' if len(ORIG_LOG) == 1 else 'ies'}")
-for _m in ORIG_STATS["badlog"]:
-    print(f"  ! _Log.md line does not match the format, not rendered: {_m}", file=sys.stderr)
-for _m in ORIG_STATS["unkeyed"]:
-    # Not fatal — it renders. It just can never be matched to a page capture, so a capture of the
-    # same idea would be written a second time instead of being recognised as already filed.
-    print(f"  ! original has no capture_id, cannot be deduped: {_m}", file=sys.stderr)
-for _m in ORIG_STATS["failed"]:
-    print(f"  ! originals: {_m}", file=sys.stderr)
 # PATCH-137 (F13a) — a full successful build must not exit 1 on its own success line.
 # `--out` anywhere outside the vault made `relative_to` raise: the page WAS written, then the
 # process died with a traceback and no size line, so the build looked failed when it had not.

@@ -841,6 +841,9 @@ note exists for it; the build prints every unclaimed chart by name.
 
 ### The Originals board (spec-179, 2026-09-10)
 
+> **Retired 2026-11-16.** Originals is no longer part of School. It is its own tool in the Music app
+> (`music/originals/`), and School is just the curriculum and progress. What follows is kept as history.
+
 `Originals` in the rail's **Library** group: the shared idea board, one card per song idea, newest
 first. Nate: *"i want to create an 'originals' tab within the music school artifact so myself and my
 sister can put song ideas there and ideate on them."*

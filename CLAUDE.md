@@ -103,6 +103,13 @@ every Music tool has. Restyle the app there, tokens first; change `app.css` only
 should change in both. `library.html` is the same app in library mode (`LIBMODE`): the Songs,
 Drills, Tools and My files shelves that Music's Library tool links to.
 
+**School is just the curriculum and progress** (Nate, 2026-11-16). The shelves and every drill page
+are Library's: `SHELF_HEADS` in `app.js` lists their routes, and each mode sends the other's routes
+to the other page (`otherPage`). The drill practice log is Library's too: in the app it lives in
+`library:practice` (account document `practice`, merged drill by drill), not in `P.drills`; Hanon
+lessons log into it through the same `logPractice`. The artifact page (not `LOCAL`) still keeps
+`P.drills`.
+
 ## Things carried over from the vault that work differently here
 
 - **Progress** is per device, not `Machine/School/progress-<user>.json`. A backup exported from the
